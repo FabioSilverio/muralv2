@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mural Minimalista</title>
-    <!-- Usar LocalBase para armazenamento local persistente compartilhado -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -404,12 +401,11 @@
     </div>
 
     <script>
-        // Configurações e variáveis
-        const DB_PREFIX = 'mural-compartilhado-';
-        let currentStorageId = '';
+        // Variáveis globais
         let posts = [];
         let username = localStorage.getItem('username') || 'Anônimo';
         let userId = localStorage.getItem('userId') || generateUserId();
+        let muralId = localStorage.getItem('muralId');
         
         // Elementos DOM
         const linkInput = document.getElementById('link-input');
@@ -429,102 +425,64 @@
         const createNewStorageBtn = document.getElementById('create-new-storage');
         const joinStorageBtn = document.getElementById('join-storage');
         const storageIdInput = document.getElementById('storage-id-input');
-        
-        // Configurar o banco de dados
-        const db = localforage.createInstance({
-            name: 'muralDB'
-        });
+        const infoBanner = document.getElementById('info-banner');
         
         // Inicialização
         init();
         
-        async function init() {
+        function init() {
             // Carregar nome de usuário salvo
             usernameInput.value = username;
             
-            // Verificar se já tem um ID de armazenamento salvo
-            const savedStorageId = localStorage.getItem('muralStorageId');
-            
-            if (savedStorageId) {
-                // Usar o ID salvo
-                currentStorageId = savedStorageId;
-                await loadPosts();
+            // Verificar se já temos um ID de mural
+            if (muralId) {
+                // Usar o ID existente
+                storageUrlInput.value = muralId;
+                loadPosts();
                 setupEventListeners();
-                updateStorageUrl();
                 globalLoading.style.display = 'none';
             } else {
                 // Mostrar modal de configuração
                 globalLoading.style.display = 'none';
                 setupModal.style.display = 'block';
+                
+                // Configurar os botões do modal
+                createNewStorageBtn.addEventListener('click', createNewMural);
+                joinStorageBtn.addEventListener('click', joinExistingMural);
             }
         }
         
-        // Configurar localforage para o ID de armazenamento especificado
-        function setupStorage(storageId) {
-            currentStorageId = storageId;
-            localStorage.setItem('muralStorageId', storageId);
-            updateStorageUrl();
+        // Criar um novo mural
+        function createNewMural() {
+            const newId = generateMuralId();
+            setMuralId(newId);
+            setupModal.style.display = 'none';
+            setupEventListeners();
+            loadPosts();
         }
         
-        // Atualizar a URL para compartilhamento
-        function updateStorageUrl() {
-            storageUrlInput.value = currentStorageId;
-        }
-        
-        // Copiar URL para o clipboard
-        function copyToClipboard() {
-            storageUrlInput.select();
-            document.execCommand('copy');
-            alert('Código copiado! Compartilhe com seus amigos para que eles vejam o mesmo mural.');
-        }
-        
-        // Configurar listeners de eventos
-        function setupEventListeners() {
-            // Botão para adicionar post
-            submitButton.addEventListener('click', addPost);
-            
-            // Salvar nome de usuário ao sair do campo
-            usernameInput.addEventListener('blur', () => {
-                username = usernameInput.value.trim() || 'Anônimo';
-                localStorage.setItem('username', username);
-            });
-            
-            // Detectar tecla Enter no campo de link
-            linkInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    addPost();
-                }
-            });
-            
-            // Botão de copiar URL
-            copyBtn.addEventListener('click', copyToClipboard);
-            
-            // Botões do modal
-            createNewStorageBtn.addEventListener('click', () => {
-                const newId = generateStorageId();
-                setupStorage(newId);
+        // Entrar em um mural existente
+        function joinExistingMural() {
+            const inputId = storageIdInput.value.trim();
+            if (inputId) {
+                setMuralId(inputId);
                 setupModal.style.display = 'none';
+                setupEventListeners();
                 loadPosts();
-            });
-            
-            joinStorageBtn.addEventListener('click', () => {
-                const inputId = storageIdInput.value.trim();
-                if (inputId) {
-                    setupStorage(inputId);
-                    setupModal.style.display = 'none';
-                    loadPosts();
-                } else {
-                    alert('Por favor, digite um código de mural válido.');
-                }
-            });
-            
-            // Configurar verificação periódica de atualizações
-            setInterval(checkForUpdates, 5000);
+            } else {
+                alert('Por favor, digite um código de mural válido.');
+            }
         }
         
-        // Gerar ID aleatório para armazenamento
-        function generateStorageId() {
-            // Gerar um ID curto e fácil de compartilhar (6 caracteres)
+        // Definir e salvar o ID do mural
+        function setMuralId(id) {
+            muralId = id;
+            localStorage.setItem('muralId', id);
+            storageUrlInput.value = id;
+        }
+        
+        // Gerar ID aleatório para o mural
+        function generateMuralId() {
             const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             let id = '';
             for (let i = 0; i < 6; i++) {
@@ -533,9 +491,38 @@
             return id;
         }
         
+        // Configurar listeners de eventos
+        function setupEventListeners() {
+            // Botão para adicionar post
+            submitButton.addEventListener('click', addPost);
+            
+            // Salvar nome de usuário ao sair do campo
+            usernameInput.addEventListener('blur', function() {
+                username = this.value.trim() || 'Anônimo';
+                localStorage.setItem('username', username);
+            });
+            
+            // Detectar tecla Enter no campo de link
+            linkInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addPost();
+                }
+            });
+            
+            // Botão de copiar código do mural
+            copyBtn.addEventListener('click', function() {
+                storageUrlInput.select();
+                document.execCommand('copy');
+                alert('Código copiado! Compartilhe com seus amigos para que eles vejam o mesmo mural.');
+            });
+            
+            // Verificar atualizações a cada 5 segundos
+            setInterval(checkForUpdates, 5000);
+        }
+        
         // Gerar ID único para o usuário
         function generateUserId() {
-            const id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            const id = Date.now().toString(36) + Math.random().toString(36).substring(2);
             localStorage.setItem('userId', id);
             return id;
         }
@@ -544,68 +531,64 @@
         function showError(message) {
             errorMessage.textContent = message;
             errorMessage.style.display = 'block';
-            setTimeout(() => {
+            setTimeout(function() {
                 errorMessage.style.display = 'none';
             }, 5000);
         }
         
-        // Verificar atualizações
-        async function checkForUpdates() {
-            if (!currentStorageId) return;
+        // Verificar se há atualizações no armazenamento
+        function checkForUpdates() {
+            if (!muralId) return;
             
-            try {
-                const storedPosts = await db.getItem(DB_PREFIX + currentStorageId);
+            // Carregar posts de outros usuários
+            const storedPosts = localStorage.getItem('mural_posts_' + muralId);
+            if (storedPosts) {
+                const parsedPosts = JSON.parse(storedPosts);
                 
-                if (storedPosts) {
-                    const parsedPosts = JSON.parse(storedPosts);
-                    
-                    // Verificar se há alterações
-                    if (JSON.stringify(parsedPosts) !== JSON.stringify(posts)) {
-                        posts = parsedPosts;
-                        renderPosts();
-                    }
+                // Verificar se há alterações
+                if (JSON.stringify(parsedPosts) !== JSON.stringify(posts)) {
+                    posts = parsedPosts;
+                    renderPosts();
                 }
-            } catch (error) {
-                console.error('Erro ao verificar atualizações:', error);
             }
         }
         
         // Carregar posts do armazenamento
-        async function loadPosts() {
-            if (!currentStorageId) return;
+        function loadPosts() {
+            if (!muralId) return;
             
-            try {
-                const storedPosts = await db.getItem(DB_PREFIX + currentStorageId);
-                
-                if (storedPosts) {
+            // Tentar carregar do localStorage
+            const storedPosts = localStorage.getItem('mural_posts_' + muralId);
+            if (storedPosts) {
+                try {
                     posts = JSON.parse(storedPosts);
-                } else {
+                    renderPosts();
+                } catch (error) {
+                    console.error('Erro ao carregar posts:', error);
                     posts = [];
-                    // Inicializar o armazenamento se for novo
-                    await savePosts();
+                    savePosts();
                 }
-                
-                renderPosts();
-            } catch (error) {
-                console.error('Erro ao carregar posts:', error);
-                showError('Erro ao carregar conteúdo. Tente novamente.');
+            } else {
+                // Inicializar com array vazio
+                posts = [];
+                savePosts();
             }
         }
         
         // Salvar posts no armazenamento
-        async function savePosts() {
-            if (!currentStorageId) return;
+        function savePosts() {
+            if (!muralId) return;
             
             try {
-                await db.setItem(DB_PREFIX + currentStorageId, JSON.stringify(posts));
+                localStorage.setItem('mural_posts_' + muralId, JSON.stringify(posts));
             } catch (error) {
                 console.error('Erro ao salvar posts:', error);
-                showError('Erro ao salvar conteúdo. Verifique sua conexão.');
+                showError('Erro ao salvar conteúdo. Talvez o armazenamento esteja cheio.');
             }
         }
         
-        // Adiciona um novo post
-        async function addPost() {
+        // Adicionar um novo post
+        function addPost() {
             errorMessage.style.display = 'none';
             
             const url = linkInput.value.trim();
@@ -635,7 +618,7 @@
                     id: Date.now().toString(),
                     url: url,
                     title: isImage ? 'Imagem compartilhada' : 'Link compartilhado',
-                    image: isImage ? url : (isVideo ? null : null),
+                    image: isImage ? url : null,
                     comment: comment,
                     author: username,
                     user_id: userId,
@@ -644,7 +627,7 @@
                 
                 // Adicionar ao array e salvar
                 posts.unshift(newPost);
-                await savePosts();
+                savePosts();
                 
                 // Atualizar UI
                 renderPosts();
@@ -658,7 +641,7 @@
                 
             } catch (error) {
                 console.error('Erro ao adicionar post:', error);
-                showError(`Falha ao salvar: ${error.message || 'Erro no servidor'}`);
+                showError('Falha ao salvar o conteúdo. Tente novamente.');
             } finally {
                 // Esconder estado de carregamento
                 loadingIcon.style.display = 'none';
@@ -704,7 +687,7 @@
             // Limpar feed e adicionar cada post
             feed.innerHTML = '';
             
-            posts.forEach(post => {
+            posts.forEach(function(post) {
                 const postElement = document.createElement('div');
                 postElement.className = 'post';
                 
@@ -749,20 +732,22 @@
         }
         
         // Função para deletar um post
-        async function deletePost(id) {
+        function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
                 try {
                     // Remover post do array
-                    posts = posts.filter(post => post.id !== id);
+                    posts = posts.filter(function(post) {
+                        return post.id !== id;
+                    });
                     
                     // Salvar alterações
-                    await savePosts();
+                    savePosts();
                     
                     // Atualizar UI
                     renderPosts();
                 } catch (error) {
                     console.error('Erro ao remover post:', error);
-                    showError(`Não foi possível remover o conteúdo: ${error.message || 'Erro ao salvar.'}`);
+                    showError('Não foi possível remover o conteúdo. Tente novamente.');
                 }
             }
         }
@@ -771,7 +756,7 @@
         function showAlert(type) {
             const alert = type === 'success' ? alertSuccess : alertError;
             alert.style.display = 'block';
-            setTimeout(() => {
+            setTimeout(function() {
                 alert.style.display = 'none';
             }, 3000);
         }
