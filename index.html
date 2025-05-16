@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mural Minimalista</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -347,7 +349,7 @@
     <div id="global-loading" class="global-loading">
         <div style="text-align: center;">
             <div class="loader"></div>
-            <div class="loader-text">Carregando...</div>
+            <div class="loader-text">Conectando ao servidor...</div>
         </div>
     </div>
 
@@ -401,11 +403,27 @@
     </div>
 
     <script>
+        // Configuração do Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBnmrMAfoQvVRgXCIPG8B3iBgD1DNox5hg",
+            authDomain: "mural-minimalista.firebaseapp.com",
+            databaseURL: "https://mural-minimalista-default-rtdb.firebaseio.com",
+            projectId: "mural-minimalista",
+            storageBucket: "mural-minimalista.appspot.com",
+            messagingSenderId: "951410585595",
+            appId: "1:951410585595:web:7df542b49345d9a7333b81"
+        };
+        
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        
         // Variáveis globais
         let posts = [];
         let username = localStorage.getItem('username') || 'Anônimo';
         let userId = localStorage.getItem('userId') || generateUserId();
         let muralId = localStorage.getItem('muralId');
+        let postsRef = null;
         
         // Elementos DOM
         const linkInput = document.getElementById('link-input');
@@ -438,7 +456,7 @@
             if (muralId) {
                 // Usar o ID existente
                 storageUrlInput.value = muralId;
-                loadPosts();
+                setupFirebaseListeners();
                 setupEventListeners();
                 globalLoading.style.display = 'none';
             } else {
@@ -457,21 +475,50 @@
             const newId = generateMuralId();
             setMuralId(newId);
             setupModal.style.display = 'none';
+            setupFirebaseListeners();
             setupEventListeners();
-            loadPosts();
         }
         
         // Entrar em um mural existente
         function joinExistingMural() {
-            const inputId = storageIdInput.value.trim();
+            const inputId = storageIdInput.value.trim().toUpperCase();
             if (inputId) {
                 setMuralId(inputId);
                 setupModal.style.display = 'none';
+                setupFirebaseListeners();
                 setupEventListeners();
-                loadPosts();
             } else {
                 alert('Por favor, digite um código de mural válido.');
             }
+        }
+        
+        // Configurar ouvintes do Firebase
+        function setupFirebaseListeners() {
+            postsRef = database.ref('murals/' + muralId + '/posts');
+            
+            // Ouvir alterações
+            postsRef.on('value', (snapshot) => {
+                posts = [];
+                snapshot.forEach((childSnapshot) => {
+                    posts.push({
+                        id: childSnapshot.key,
+                        ...childSnapshot.val()
+                    });
+                });
+                
+                // Ordenar do mais recente para o mais antigo
+                posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                
+                renderPosts();
+                globalLoading.style.display = 'none';
+            });
+            
+            // Lidar com erros
+            postsRef.on('error', (error) => {
+                console.error('Erro ao ler dados:', error);
+                showError('Erro ao conectar com o servidor. Tente novamente.');
+                globalLoading.style.display = 'none';
+            });
         }
         
         // Definir e salvar o ID do mural
@@ -515,9 +562,6 @@
                 document.execCommand('copy');
                 alert('Código copiado! Compartilhe com seus amigos para que eles vejam o mesmo mural.');
             });
-            
-            // Verificar atualizações a cada 5 segundos
-            setInterval(checkForUpdates, 5000);
         }
         
         // Gerar ID único para o usuário
@@ -534,57 +578,6 @@
             setTimeout(function() {
                 errorMessage.style.display = 'none';
             }, 5000);
-        }
-        
-        // Verificar se há atualizações no armazenamento
-        function checkForUpdates() {
-            if (!muralId) return;
-            
-            // Carregar posts de outros usuários
-            const storedPosts = localStorage.getItem('mural_posts_' + muralId);
-            if (storedPosts) {
-                const parsedPosts = JSON.parse(storedPosts);
-                
-                // Verificar se há alterações
-                if (JSON.stringify(parsedPosts) !== JSON.stringify(posts)) {
-                    posts = parsedPosts;
-                    renderPosts();
-                }
-            }
-        }
-        
-        // Carregar posts do armazenamento
-        function loadPosts() {
-            if (!muralId) return;
-            
-            // Tentar carregar do localStorage
-            const storedPosts = localStorage.getItem('mural_posts_' + muralId);
-            if (storedPosts) {
-                try {
-                    posts = JSON.parse(storedPosts);
-                    renderPosts();
-                } catch (error) {
-                    console.error('Erro ao carregar posts:', error);
-                    posts = [];
-                    savePosts();
-                }
-            } else {
-                // Inicializar com array vazio
-                posts = [];
-                savePosts();
-            }
-        }
-        
-        // Salvar posts no armazenamento
-        function savePosts() {
-            if (!muralId) return;
-            
-            try {
-                localStorage.setItem('mural_posts_' + muralId, JSON.stringify(posts));
-            } catch (error) {
-                console.error('Erro ao salvar posts:', error);
-                showError('Erro ao salvar conteúdo. Talvez o armazenamento esteja cheio.');
-            }
         }
         
         // Adicionar um novo post
@@ -615,7 +608,6 @@
                 
                 // Criar objeto do post
                 const newPost = {
-                    id: Date.now().toString(),
                     url: url,
                     title: isImage ? 'Imagem compartilhada' : 'Link compartilhado',
                     image: isImage ? url : null,
@@ -625,24 +617,31 @@
                     created_at: new Date().toISOString()
                 };
                 
-                // Adicionar ao array e salvar
-                posts.unshift(newPost);
-                savePosts();
-                
-                // Atualizar UI
-                renderPosts();
-                
-                // Limpar campos
-                linkInput.value = '';
-                commentInput.value = '';
-                
-                // Mostrar alerta de sucesso
-                showAlert('success');
+                // Adicionar ao Firebase
+                const newPostRef = postsRef.push();
+                newPostRef.set(newPost)
+                    .then(() => {
+                        // Limpar campos
+                        linkInput.value = '';
+                        commentInput.value = '';
+                        
+                        // Mostrar alerta de sucesso
+                        showAlert('success');
+                    })
+                    .catch((error) => {
+                        console.error('Erro ao adicionar post:', error);
+                        showError('Falha ao salvar o conteúdo. Tente novamente.');
+                    })
+                    .finally(() => {
+                        // Esconder estado de carregamento
+                        loadingIcon.style.display = 'none';
+                        submitButton.disabled = false;
+                    });
                 
             } catch (error) {
                 console.error('Erro ao adicionar post:', error);
                 showError('Falha ao salvar o conteúdo. Tente novamente.');
-            } finally {
+                
                 // Esconder estado de carregamento
                 loadingIcon.style.display = 'none';
                 submitButton.disabled = false;
@@ -734,21 +733,14 @@
         // Função para deletar um post
         function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
-                try {
-                    // Remover post do array
-                    posts = posts.filter(function(post) {
-                        return post.id !== id;
+                postsRef.child(id).remove()
+                    .then(() => {
+                        showAlert('success');
+                    })
+                    .catch((error) => {
+                        console.error('Erro ao remover post:', error);
+                        showError('Não foi possível remover o conteúdo. Tente novamente.');
                     });
-                    
-                    // Salvar alterações
-                    savePosts();
-                    
-                    // Atualizar UI
-                    renderPosts();
-                } catch (error) {
-                    console.error('Erro ao remover post:', error);
-                    showError('Não foi possível remover o conteúdo. Tente novamente.');
-                }
             }
         }
         
