@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mural Minimalista</title>
+    <!-- Usar LocalBase para armazenamento local persistente compartilhado -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --card-bg: #2d2d2d;
+            --text-color: #f5f5f5;
+            --accent-color: #0071e3;
+            --secondary-bg: #3a3a3a;
+            --border-color: #444444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px 0;
+        }
+
+        h1 {
+            font-weight: 500;
+            letter-spacing: -0.5px;
+            margin-bottom: 8px;
+            font-size: 32px;
+        }
+
+        p {
+            color: #a1a1a6;
+        }
+
+        .input-section {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 40px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 14px;
+            margin-bottom: 16px;
+            border: none;
+            border-radius: 8px;
+            background-color: var(--secondary-bg);
+            color: var(--text-color);
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        textarea:focus, input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px var(--accent-color);
+        }
+
+        textarea::placeholder, input::placeholder {
+            color: #8e8e93;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background-color: #0077ed;
+        }
+
+        .feed {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .post {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .post:hover {
+            transform: translateY(-3px);
+        }
+
+        .post-content {
+            margin-bottom: 16px;
+        }
+
+        .post-title {
+            font-size: 18px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .post-image-container {
+            width: 100%;
+            margin: 16px 0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .post-image {
+            width: 100%;
+            border-radius: 8px;
+            display: block;
+        }
+
+        .post-link {
+            color: var(--accent-color);
+            text-decoration: none;
+            display: block;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        .post-link:hover {
+            text-decoration: underline;
+        }
+
+        .post-comment {
+            padding: 12px 16px;
+            background-color: var(--secondary-bg);
+            border-radius: 8px;
+            margin-top: 8px;
+            font-style: italic;
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .post-meta {
+            font-size: 14px;
+            color: #a1a1a6;
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .delete-button {
+            background-color: transparent;
+            color: #ff453a;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .delete-button:hover {
+            background-color: rgba(255, 69, 58, 0.1);
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #8e8e93;
+            padding: 40px 0;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--text-color);
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .alert-success {
+            background-color: rgba(48, 209, 88, 0.2);
+            color: #30d158;
+        }
+
+        .alert-error {
+            background-color: rgba(255, 69, 58, 0.2);
+            color: #ff453a;
+        }
+
+        .username-input {
+            background-color: var(--secondary-bg);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-right: 8px;
+            color: var(--text-color);
+            border: none;
+            vertical-align: middle;
+            max-width: 150px;
+        }
+
+        .error-message {
+            color: #ff453a;
+            margin-top: 10px;
+            font-size: 14px;
+            padding: 8px;
+            background-color: rgba(255, 69, 58, 0.1);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .info-banner {
+            background-color: rgba(48, 107, 209, 0.2);
+            color: #30d158;
+            text-align: center;
+            padding: 12px;
+            margin: 0 0 20px 0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .storage-url-container {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background-color: var(--secondary-bg);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .storage-url-input {
+            flex-grow: 1;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 8px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .copy-btn {
+            padding: 6px 10px;
+            font-size: 14px;
+            border-radius: 4px;
+        }
+
+        .global-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s linear infinite;
+        }
+
+        .loader-text {
+            color: white;
+            margin-top: 16px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1001;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 15px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .input-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="global-loading" class="global-loading">
+        <div style="text-align: center;">
+            <div class="loader"></div>
+            <div class="loader-text">Carregando...</div>
+        </div>
+    </div>
+
+    <div id="setup-modal" class="modal">
+        <div class="modal-content">
+            <h3>Configuração do Mural</h3>
+            <p>Escolha uma opção para compartilhar este mural:</p>
+            <div style="margin-top: 15px;">
+                <button id="create-new-storage">Criar Novo Mural</button>
+                <div style="margin-top: 20px;">
+                    <p>Ou entre em um mural existente:</p>
+                    <input type="text" id="storage-id-input" placeholder="Digite o código do mural compartilhado">
+                    <button id="join-storage" style="margin-top: 10px;">Entrar no Mural</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>Mural Minimalista</h1>
+            <p>Compartilhe links e conteúdo com seus amigos</p>
+            <div style="margin-top: 12px;">
+                <input type="text" id="username-input" class="username-input" placeholder="Seu nome">
+            </div>
+        </header>
+
+        <div id="info-banner" class="info-banner">
+            Para que todos vejam os mesmos conteúdos, compartilhe este código do mural:
+            <div class="storage-url-container">
+                <input type="text" id="storage-url" class="storage-url-input" readonly>
+                <button id="copy-btn" class="copy-btn">Copiar</button>
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="alert alert-success" id="alert-success">Link adicionado com sucesso!</div>
+            <div class="alert alert-error" id="alert-error">Não foi possível reconhecer o link. Verifique e tente novamente.</div>
+            <div id="error-message" class="error-message"></div>
+            
+            <input type="text" id="link-input" placeholder="Cole o link aqui (URL de site, imagem ou vídeo)">
+            <textarea id="comment-input" placeholder="Adicione um comentário sobre o link..." rows="2"></textarea>
+            <button id="submit-button"><span id="loading-icon" class="loading" style="display: none;"></span> Adicionar ao Mural</button>
+        </div>
+
+        <div class="feed" id="feed">
+            <div class="empty-message" id="empty-message">
+                Nenhum conteúdo compartilhado ainda. Adicione o primeiro link!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configurações e variáveis
+        const DB_PREFIX = 'mural-compartilhado-';
+        let currentStorageId = '';
+        let posts = [];
+        let username = localStorage.getItem('username') || 'Anônimo';
+        let userId = localStorage.getItem('userId') || generateUserId();
+        
+        // Elementos DOM
+        const linkInput = document.getElementById('link-input');
+        const commentInput = document.getElementById('comment-input');
+        const submitButton = document.getElementById('submit-button');
+        const feed = document.getElementById('feed');
+        const emptyMessage = document.getElementById('empty-message');
+        const loadingIcon = document.getElementById('loading-icon');
+        const alertSuccess = document.getElementById('alert-success');
+        const alertError = document.getElementById('alert-error');
+        const globalLoading = document.getElementById('global-loading');
+        const usernameInput = document.getElementById('username-input');
+        const errorMessage = document.getElementById('error-message');
+        const storageUrlInput = document.getElementById('storage-url');
+        const copyBtn = document.getElementById('copy-btn');
+        const setupModal = document.getElementById('setup-modal');
+        const createNewStorageBtn = document.getElementById('create-new-storage');
+        const joinStorageBtn = document.getElementById('join-storage');
+        const storageIdInput = document.getElementById('storage-id-input');
+        
+        // Configurar o banco de dados
+        const db = localforage.createInstance({
+            name: 'muralDB'
+        });
+        
+        // Inicialização
+        init();
+        
+        async function init() {
+            // Carregar nome de usuário salvo
+            usernameInput.value = username;
+            
+            // Verificar se já tem um ID de armazenamento salvo
+            const savedStorageId = localStorage.getItem('muralStorageId');
+            
+            if (savedStorageId) {
+                // Usar o ID salvo
+                currentStorageId = savedStorageId;
+                await loadPosts();
+                setupEventListeners();
+                updateStorageUrl();
+                globalLoading.style.display = 'none';
+            } else {
+                // Mostrar modal de configuração
+                globalLoading.style.display = 'none';
+                setupModal.style.display = 'block';
+            }
+        }
+        
+        // Configurar localforage para o ID de armazenamento especificado
+        function setupStorage(storageId) {
+            currentStorageId = storageId;
+            localStorage.setItem('muralStorageId', storageId);
+            updateStorageUrl();
+        }
+        
+        // Atualizar a URL para compartilhamento
+        function updateStorageUrl() {
+            storageUrlInput.value = currentStorageId;
+        }
+        
+        // Copiar URL para o clipboard
+        function copyToClipboard() {
+            storageUrlInput.select();
+            document.execCommand('copy');
+            alert('Código copiado! Compartilhe com seus amigos para que eles vejam o mesmo mural.');
+        }
+        
+        // Configurar listeners de eventos
+        function setupEventListeners() {
+            // Botão para adicionar post
+            submitButton.addEventListener('click', addPost);
+            
+            // Salvar nome de usuário ao sair do campo
+            usernameInput.addEventListener('blur', () => {
+                username = usernameInput.value.trim() || 'Anônimo';
+                localStorage.setItem('username', username);
+            });
+            
+            // Detectar tecla Enter no campo de link
+            linkInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addPost();
+                }
+            });
+            
+            // Botão de copiar URL
+            copyBtn.addEventListener('click', copyToClipboard);
+            
+            // Botões do modal
+            createNewStorageBtn.addEventListener('click', () => {
+                const newId = generateStorageId();
+                setupStorage(newId);
+                setupModal.style.display = 'none';
+                loadPosts();
+            });
+            
+            joinStorageBtn.addEventListener('click', () => {
+                const inputId = storageIdInput.value.trim();
+                if (inputId) {
+                    setupStorage(inputId);
+                    setupModal.style.display = 'none';
+                    loadPosts();
+                } else {
+                    alert('Por favor, digite um código de mural válido.');
+                }
+            });
+            
+            // Configurar verificação periódica de atualizações
+            setInterval(checkForUpdates, 5000);
+        }
+        
+        // Gerar ID aleatório para armazenamento
+        function generateStorageId() {
+            // Gerar um ID curto e fácil de compartilhar (6 caracteres)
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            let id = '';
+            for (let i = 0; i < 6; i++) {
+                id += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return id;
+        }
+        
+        // Gerar ID único para o usuário
+        function generateUserId() {
+            const id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('userId', id);
+            return id;
+        }
+        
+        // Mostrar mensagem de erro
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            setTimeout(() => {
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Verificar atualizações
+        async function checkForUpdates() {
+            if (!currentStorageId) return;
+            
+            try {
+                const storedPosts = await db.getItem(DB_PREFIX + currentStorageId);
+                
+                if (storedPosts) {
+                    const parsedPosts = JSON.parse(storedPosts);
+                    
+                    // Verificar se há alterações
+                    if (JSON.stringify(parsedPosts) !== JSON.stringify(posts)) {
+                        posts = parsedPosts;
+                        renderPosts();
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao verificar atualizações:', error);
+            }
+        }
+        
+        // Carregar posts do armazenamento
+        async function loadPosts() {
+            if (!currentStorageId) return;
+            
+            try {
+                const storedPosts = await db.getItem(DB_PREFIX + currentStorageId);
+                
+                if (storedPosts) {
+                    posts = JSON.parse(storedPosts);
+                } else {
+                    posts = [];
+                    // Inicializar o armazenamento se for novo
+                    await savePosts();
+                }
+                
+                renderPosts();
+            } catch (error) {
+                console.error('Erro ao carregar posts:', error);
+                showError('Erro ao carregar conteúdo. Tente novamente.');
+            }
+        }
+        
+        // Salvar posts no armazenamento
+        async function savePosts() {
+            if (!currentStorageId) return;
+            
+            try {
+                await db.setItem(DB_PREFIX + currentStorageId, JSON.stringify(posts));
+            } catch (error) {
+                console.error('Erro ao salvar posts:', error);
+                showError('Erro ao salvar conteúdo. Verifique sua conexão.');
+            }
+        }
+        
+        // Adiciona um novo post
+        async function addPost() {
+            errorMessage.style.display = 'none';
+            
+            const url = linkInput.value.trim();
+            const comment = commentInput.value.trim();
+            
+            if (!url) {
+                alert('Por favor, insira um link válido.');
+                return;
+            }
+            
+            if (!isValidURL(url)) {
+                showError('O URL fornecido não é válido. Inclua http:// ou https://');
+                return;
+            }
+            
+            // Mostrar estado de carregamento
+            loadingIcon.style.display = 'inline-block';
+            submitButton.disabled = true;
+            
+            try {
+                // Verificar se é uma URL de imagem
+                const isImage = isImageUrl(url);
+                const isVideo = isVideoUrl(url);
+                
+                // Criar objeto do post
+                const newPost = {
+                    id: Date.now().toString(),
+                    url: url,
+                    title: isImage ? 'Imagem compartilhada' : 'Link compartilhado',
+                    image: isImage ? url : (isVideo ? null : null),
+                    comment: comment,
+                    author: username,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
+                };
+                
+                // Adicionar ao array e salvar
+                posts.unshift(newPost);
+                await savePosts();
+                
+                // Atualizar UI
+                renderPosts();
+                
+                // Limpar campos
+                linkInput.value = '';
+                commentInput.value = '';
+                
+                // Mostrar alerta de sucesso
+                showAlert('success');
+                
+            } catch (error) {
+                console.error('Erro ao adicionar post:', error);
+                showError(`Falha ao salvar: ${error.message || 'Erro no servidor'}`);
+            } finally {
+                // Esconder estado de carregamento
+                loadingIcon.style.display = 'none';
+                submitButton.disabled = false;
+            }
+        }
+        
+        // Valida URL
+        function isValidURL(string) {
+            try {
+                new URL(string);
+                return true;
+            } catch (_) {
+                return false;
+            }
+        }
+        
+        // Verifica se é URL de imagem
+        function isImageUrl(url) {
+            return /\.(jpeg|jpg|gif|png|webp)$/i.test(url);
+        }
+        
+        // Verifica se é URL de vídeo
+        function isVideoUrl(url) {
+            return url.includes('youtube.com') || 
+                   url.includes('youtu.be') || 
+                   url.includes('vimeo.com') ||
+                   url.includes('dailymotion.com') ||
+                   /\.(mp4|webm|ogg)$/i.test(url);
+        }
+        
+        // Renderiza todos os posts
+        function renderPosts() {
+            if (posts.length === 0) {
+                emptyMessage.style.display = 'block';
+                feed.innerHTML = '';
+                feed.appendChild(emptyMessage);
+                return;
+            }
+            
+            emptyMessage.style.display = 'none';
+            
+            // Limpar feed e adicionar cada post
+            feed.innerHTML = '';
+            
+            posts.forEach(post => {
+                const postElement = document.createElement('div');
+                postElement.className = 'post';
+                
+                let postContent = `
+                    <div class="post-content">
+                        <h3 class="post-title">${post.title || 'Link compartilhado'}</h3>
+                        <a href="${post.url}" target="_blank" class="post-link">${post.url}</a>
+                `;
+                
+                // Adicionar imagem se disponível
+                if (post.image) {
+                    postContent += `
+                        <div class="post-image-container">
+                            <img src="${post.image}" alt="Imagem compartilhada" class="post-image" 
+                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/480x320';">
+                        </div>
+                    `;
+                }
+                
+                // Adicionar comentário se disponível
+                if (post.comment) {
+                    postContent += `
+                        <div class="post-comment">${post.comment}</div>
+                    `;
+                }
+                
+                // Converter data ISO para formato legível
+                const date = new Date(post.created_at).toLocaleString();
+                
+                postContent += `
+                    </div>
+                    <div class="post-meta">
+                        <span>Compartilhado por ${post.author || 'Anônimo'} • ${date}</span>
+                        ${post.user_id === userId ? 
+                          `<button class="delete-button" onclick="deletePost('${post.id}')">Remover</button>` : ''}
+                    </div>
+                `;
+                
+                postElement.innerHTML = postContent;
+                feed.appendChild(postElement);
+            });
+        }
+        
+        // Função para deletar um post
+        async function deletePost(id) {
+            if (confirm('Tem certeza que deseja remover este conteúdo?')) {
+                try {
+                    // Remover post do array
+                    posts = posts.filter(post => post.id !== id);
+                    
+                    // Salvar alterações
+                    await savePosts();
+                    
+                    // Atualizar UI
+                    renderPosts();
+                } catch (error) {
+                    console.error('Erro ao remover post:', error);
+                    showError(`Não foi possível remover o conteúdo: ${error.message || 'Erro ao salvar.'}`);
+                }
+            }
+        }
+        
+        // Mostrar alertas
+        function showAlert(type) {
+            const alert = type === 'success' ? alertSuccess : alertError;
+            alert.style.display = 'block';
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
