@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mural Minimalista</title>
+    <title>Mural Minimalista - JSONBin</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -230,68 +230,86 @@
             max-width: 150px;
         }
 
-        .error-message {
-            color: #ff453a;
-            margin-top: 10px;
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background-color: #ff453a;
+        }
+
+        .status-indicator.online {
+            background-color: #30d158;
+        }
+
+        .status-text {
             font-size: 14px;
-            padding: 8px;
-            background-color: rgba(255, 69, 58, 0.1);
-            border-radius: 8px;
-            display: none;
+            color: #a1a1a6;
         }
 
-        .sync-section {
-            background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
+        .global-loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
 
-        .export-btn, .import-btn {
-            margin-right: 10px;
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s linear infinite;
         }
 
-        .export-link {
-            display: none;
-            margin-top: 10px;
+        .loader-text {
+            color: white;
+            margin-top: 16px;
+            font-size: 16px;
+            text-align: center;
         }
 
-        #import-input {
-            display: none;
+        @media (max-width: 768px) {
+            .input-section {
+                padding: 20px;
+            }
         }
     </style>
 </head>
 <body>
+    <div id="global-loading" class="global-loading">
+        <div style="text-align: center;">
+            <div class="loader"></div>
+            <div class="loader-text">Conectando ao servidor...</div>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>Mural Minimalista</h1>
             <p>Compartilhe links e conteúdo com seus amigos</p>
             <div style="margin-top: 12px;">
                 <input type="text" id="username-input" class="username-input" placeholder="Seu nome">
+                <span id="status-indicator" class="status-indicator"></span>
+                <span id="status-text" class="status-text">Conectando...</span>
             </div>
         </header>
-
-        <div class="sync-section">
-            <h3>Compartilhar o Mural</h3>
-            <p style="margin-bottom: 15px;">Para compartilhar este mural com seus amigos:</p>
-            <button id="export-btn" class="export-btn">Exportar Mural</button>
-            <a id="export-link" class="export-link" download="mural-data.json">Clique aqui para baixar o arquivo do mural</a>
-            
-            <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--border-color);">
-            
-            <p style="margin-bottom: 15px;">Para ver um mural compartilhado por um amigo:</p>
-            <button id="import-btn" class="import-btn">Importar Mural</button>
-            <input type="file" id="import-input" accept=".json">
-        </div>
 
         <div class="input-section">
             <div class="alert alert-success" id="alert-success">Link adicionado com sucesso!</div>
             <div class="alert alert-error" id="alert-error">Não foi possível reconhecer o link. Verifique e tente novamente.</div>
-            <div id="error-message" class="error-message"></div>
             
             <input type="text" id="link-input" placeholder="Cole o link aqui (URL de site, imagem ou vídeo)">
             <textarea id="comment-input" placeholder="Adicione um comentário sobre o link..." rows="2"></textarea>
-            <button id="submit-button">Adicionar ao Mural</button>
+            <button id="submit-button"><span id="loading-icon" class="loading" style="display: none;"></span> Adicionar ao Mural</button>
         </div>
 
         <div class="feed" id="feed">
@@ -302,10 +320,16 @@
     </div>
 
     <script>
-        // Variáveis globais
+        // Configurações do JSONBin.io com seus dados
+        const JSONBIN_API_KEY = "$2a$10$.I7.T8qNb0bObcB1JvXGgeF4OgXc62CYbk/88p3xmhR.KW4rmyl86";
+        const JSONBIN_BIN_ID = "68277dad8561e97a50154401";
+        const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+        
+        // Estado da aplicação
         let posts = [];
         let username = localStorage.getItem('username') || 'Anônimo';
         let userId = localStorage.getItem('userId') || generateUserId();
+        let isConnected = false;
         
         // Elementos DOM
         const linkInput = document.getElementById('link-input');
@@ -313,247 +337,222 @@
         const submitButton = document.getElementById('submit-button');
         const feed = document.getElementById('feed');
         const emptyMessage = document.getElementById('empty-message');
+        const loadingIcon = document.getElementById('loading-icon');
         const alertSuccess = document.getElementById('alert-success');
         const alertError = document.getElementById('alert-error');
+        const globalLoading = document.getElementById('global-loading');
         const usernameInput = document.getElementById('username-input');
-        const errorMessage = document.getElementById('error-message');
-        const exportBtn = document.getElementById('export-btn');
-        const exportLink = document.getElementById('export-link');
-        const importBtn = document.getElementById('import-btn');
-        const importInput = document.getElementById('import-input');
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
         
         // Inicialização
         init();
         
-        function init() {
-            // Carregar nome de usuário
+        async function init() {
+            // Carregar nome de usuário salvo
             usernameInput.value = username;
             
-            // Carregar posts salvos
-            loadPosts();
-            
-            // Configurar event listeners
+            // Configurar listeners de eventos
             setupEventListeners();
+            
+            // Conectar ao JSONBin e buscar posts
+            await connect();
+            
+            // Esconder tela de carregamento
+            globalLoading.style.display = 'none';
+            
+            // Iniciar verificação periódica de novos posts
+            setInterval(checkForUpdates, 10000); // Verificar a cada 10 segundos
         }
         
-        // Configurar event listeners
         function setupEventListeners() {
             // Botão para adicionar post
             submitButton.addEventListener('click', addPost);
             
-            // Salvar nome de usuário
-            usernameInput.addEventListener('blur', function() {
-                username = this.value.trim() || 'Anônimo';
+            // Salvar nome de usuário ao sair do campo
+            usernameInput.addEventListener('blur', () => {
+                username = usernameInput.value.trim() || 'Anônimo';
                 localStorage.setItem('username', username);
             });
             
-            // Tecla Enter no campo de link
-            linkInput.addEventListener('keypress', function(e) {
+            // Detectar tecla Enter no campo de link
+            linkInput.addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     addPost();
                 }
             });
-            
-            // Exportar mural
-            exportBtn.addEventListener('click', exportMural);
-            
-            // Importar mural
-            importBtn.addEventListener('click', function() {
-                importInput.click();
-            });
-            
-            importInput.addEventListener('change', importMural);
         }
         
         // Gerar ID único para o usuário
         function generateUserId() {
-            const id = Date.now().toString(36) + Math.random().toString(36).substring(2);
+            const id = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
             localStorage.setItem('userId', id);
             return id;
         }
         
-        // Carregar posts salvos
-        function loadPosts() {
-            const savedPosts = localStorage.getItem('mural_posts');
-            if (savedPosts) {
-                try {
-                    posts = JSON.parse(savedPosts);
-                    renderPosts();
-                } catch (error) {
-                    console.error('Erro ao carregar posts:', error);
-                    posts = [];
-                    savePosts();
-                }
-            }
-        }
-        
-        // Salvar posts
-        function savePosts() {
+        // Conectar ao JSONBin e carregar posts iniciais
+        async function connect() {
             try {
-                localStorage.setItem('mural_posts', JSON.stringify(posts));
-            } catch (error) {
-                console.error('Erro ao salvar posts:', error);
-                showError('Erro ao salvar conteúdo. Talvez o armazenamento esteja cheio.');
-            }
-        }
-        
-        // Exportar mural
-        function exportMural() {
-            try {
-                // Criar objeto de dados
-                const exportData = {
-                    posts: posts,
-                    exportDate: new Date().toISOString()
-                };
-                
-                // Converter para JSON
-                const jsonData = JSON.stringify(exportData);
-                
-                // Criar blob
-                const blob = new Blob([jsonData], {type: 'application/json'});
-                
-                // Criar URL para download
-                const url = URL.createObjectURL(blob);
-                
-                // Configurar link de download
-                exportLink.href = url;
-                exportLink.style.display = 'block';
-                
-                // Liberar URL após um tempo
-                setTimeout(() => {
-                    URL.revokeObjectURL(url);
-                }, 60000);
-                
-                showAlert('success');
-            } catch (error) {
-                console.error('Erro ao exportar mural:', error);
-                showError('Não foi possível exportar o mural. Tente novamente.');
-            }
-        }
-        
-        // Importar mural
-        function importMural(event) {
-            try {
-                const file = event.target.files[0];
-                if (!file) return;
-                
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    try {
-                        const importData = JSON.parse(e.target.result);
-                        
-                        if (importData && Array.isArray(importData.posts)) {
-                            // Perguntar se deseja substituir ou mesclar
-                            const action = confirm('Deseja substituir todos os conteúdos atuais pelos importados?\n\nOK = Substituir tudo\nCancelar = Adicionar aos existentes');
-                            
-                            if (action) {
-                                // Substituir
-                                posts = importData.posts;
-                            } else {
-                                // Mesclar (adicionar novos)
-                                const existingIds = posts.map(p => p.id);
-                                importData.posts.forEach(post => {
-                                    if (!existingIds.includes(post.id)) {
-                                        posts.push(post);
-                                    }
-                                });
-                                
-                                // Ordenar por data
-                                posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                            }
-                            
-                            savePosts();
-                            renderPosts();
-                            showAlert('success');
-                        } else {
-                            showError('Arquivo inválido. Não é um mural exportado corretamente.');
-                        }
-                    } catch (parseError) {
-                        console.error('Erro ao processar arquivo importado:', parseError);
-                        showError('Arquivo inválido ou corrompido. Tente outro arquivo.');
+                // Buscar posts existentes
+                const response = await fetch(JSONBIN_URL, {
+                    method: 'GET',
+                    headers: {
+                        'X-Master-Key': JSONBIN_API_KEY,
+                        'X-Bin-Meta': 'false'
                     }
-                };
+                });
                 
-                reader.onerror = function() {
-                    showError('Erro ao ler o arquivo. Tente novamente.');
-                };
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar dados');
+                }
                 
-                reader.readAsText(file);
+                const data = await response.json();
                 
-                // Limpar input para permitir importar o mesmo arquivo novamente
-                event.target.value = '';
-            } catch (error) {
-                console.error('Erro ao importar mural:', error);
-                showError('Não foi possível importar o mural. Tente novamente.');
-            }
-        }
-        
-        // Mostrar mensagem de erro
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-            setTimeout(function() {
-                errorMessage.style.display = 'none';
-            }, 5000);
-        }
-        
-        // Adicionar um novo post
-        function addPost() {
-            errorMessage.style.display = 'none';
-            
-            const url = linkInput.value.trim();
-            const comment = commentInput.value.trim();
-            
-            if (!url) {
-                alert('Por favor, insira um link válido.');
-                return;
-            }
-            
-            if (!isValidURL(url)) {
-                showError('O URL fornecido não é válido. Inclua http:// ou https://');
-                return;
-            }
-            
-            try {
-                // Verificar se é uma URL de imagem
-                const isImage = isImageUrl(url);
+                // Se for a primeira vez que usamos o bin, pode não ter dados ainda
+                if (data && data.record && data.record.posts) {
+                    posts = data.record.posts;
+                } else {
+                    // Inicializar com array vazio e salvar
+                    posts = [];
+                    await updateBin();
+                }
                 
-                // Criar objeto do post
-                const newPost = {
-                    id: Date.now().toString(),
-                    url: url,
-                    title: isImage ? 'Imagem compartilhada' : 'Link compartilhado',
-                    image: isImage ? url : null,
-                    comment: comment,
-                    author: username,
-                    user_id: userId,
-                    created_at: new Date().toISOString()
-                };
-                
-                // Adicionar ao array e salvar
-                posts.unshift(newPost);
-                savePosts();
-                
-                // Atualizar UI
                 renderPosts();
                 
-                // Limpar campos
-                linkInput.value = '';
-                commentInput.value = '';
+                // Atualizar status
+                isConnected = true;
+                updateConnectionStatus();
+            } catch (error) {
+                console.error('Erro ao conectar:', error);
                 
-                // Mostrar alerta de sucesso
-                showAlert('success');
+                // Tentar carregar posts do localStorage como fallback
+                const savedPosts = localStorage.getItem('localPosts');
+                if (savedPosts) {
+                    posts = JSON.parse(savedPosts);
+                    renderPosts();
+                }
+                
+                isConnected = false;
+                updateConnectionStatus();
+            }
+        }
+        
+        // Verificar por atualizações periodicamente
+        async function checkForUpdates() {
+            if (!isConnected) return;
+            
+            try {
+                const response = await fetch(JSONBIN_URL, {
+                    method: 'GET',
+                    headers: {
+                        'X-Master-Key': JSONBIN_API_KEY,
+                        'X-Bin-Meta': 'false'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar atualizações');
+                }
+                
+                const data = await response.json();
+                
+                if (data && data.record && data.record.posts) {
+                    // Verificar se há novos posts comparando com os que já temos
+                    const serverPosts = data.record.posts;
+                    
+                    // Verificar se há novos posts (por simplicidade, apenas verificamos o comprimento)
+                    if (serverPosts.length !== posts.length) {
+                        posts = serverPosts;
+                        renderPosts();
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao verificar atualizações:', error);
+            }
+        }
+        
+        // Atualizar o bin com os posts atuais
+        async function updateBin() {
+            if (!isConnected) {
+                // Salvar localmente como fallback
+                localStorage.setItem('localPosts', JSON.stringify(posts));
+                return;
+            }
+            
+            try {
+                const response = await fetch(JSONBIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': JSONBIN_API_KEY
+                    },
+                    body: JSON.stringify({ posts: posts })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Falha ao atualizar dados');
+                }
+                
+                // Também salvar localmente como backup
+                localStorage.setItem('localPosts', JSON.stringify(posts));
                 
             } catch (error) {
-                console.error('Erro ao adicionar post:', error);
-                showError('Falha ao salvar o conteúdo. Tente novamente.');
+                console.error('Erro ao atualizar bin:', error);
+                
+                // Salvar localmente como fallback
+                localStorage.setItem('localPosts', JSON.stringify(posts));
+            }
+        }
+        
+        // Atualizar indicador de conexão
+        function updateConnectionStatus() {
+            if (isConnected) {
+                statusIndicator.classList.add('online');
+                statusText.textContent = 'Conectado';
+            } else {
+                statusIndicator.classList.remove('online');
+                statusText.textContent = 'Modo local';
+            }
+        }
+        
+        // Função para obter metadados de um link
+        async function getLinkMetadata(url) {
+            if (!isValidURL(url)) {
+                showAlert('error');
+                return null;
+            }
+            
+            try {
+                // Verificar se é uma URL de imagem direta
+                if (isImageUrl(url)) {
+                    return {
+                        title: 'Imagem compartilhada',
+                        description: '',
+                        url: url,
+                        image: url
+                    };
+                }
+                
+                // Para outros URLs, tentamos identificar o tipo
+                return {
+                    title: `Conteúdo compartilhado`,
+                    description: '',
+                    url: url,
+                    image: isVideoUrl(url) ? 'https://via.placeholder.com/480x360?text=Video' : null
+                };
+            } catch (error) {
+                console.error('Erro ao obter metadados do link:', error);
+                showAlert('error');
+                return null;
             }
         }
         
         // Valida URL
         function isValidURL(string) {
             try {
+                if (!string.startsWith('http://') && !string.startsWith('https://')) {
+                    string = 'https://' + string;
+                }
                 new URL(string);
                 return true;
             } catch (_) {
@@ -564,6 +563,82 @@
         // Verifica se é URL de imagem
         function isImageUrl(url) {
             return /\.(jpeg|jpg|gif|png|webp)$/i.test(url);
+        }
+        
+        // Verifica se é URL de vídeo
+        function isVideoUrl(url) {
+            return url.includes('youtube.com') || 
+                   url.includes('youtu.be') || 
+                   url.includes('vimeo.com') ||
+                   url.includes('dailymotion.com') ||
+                   /\.(mp4|webm|ogg)$/i.test(url);
+        }
+        
+        // Adiciona um novo post
+        async function addPost() {
+            const url = linkInput.value.trim();
+            let fixedUrl = url;
+            if (!url) {
+                alert('Por favor, insira um link válido.');
+                return;
+            }
+            
+            if (!fixedUrl.startsWith('http://') && !fixedUrl.startsWith('https://')) {
+                fixedUrl = 'https://' + fixedUrl;
+            }
+            
+            // Mostrar estado de carregamento
+            loadingIcon.style.display = 'inline-block';
+            submitButton.disabled = true;
+            
+            // Obter metadados do link
+            const metadata = await getLinkMetadata(fixedUrl);
+            
+            if (!metadata) {
+                loadingIcon.style.display = 'none';
+                submitButton.disabled = false;
+                return;
+            }
+            
+            // Criar novo post
+            const newPost = {
+                id: Date.now().toString(),
+                url: fixedUrl,
+                title: metadata.title || 'Link compartilhado',
+                image: metadata.image || null,
+                comment: commentInput.value.trim(),
+                author: username,
+                user_id: userId,
+                created_at: new Date().toISOString()
+            };
+            
+            try {
+                // Adicionar ao início da lista de posts
+                posts.unshift(newPost);
+                
+                // Atualizar o bin
+                await updateBin();
+                
+                // Limpar campos
+                linkInput.value = '';
+                commentInput.value = '';
+                
+                // Renderizar posts atualizados
+                renderPosts();
+                
+                // Mostrar alerta de sucesso
+                showAlert('success');
+            } catch (error) {
+                console.error('Erro ao adicionar post:', error);
+                alert('Não foi possível salvar o conteúdo. Tente novamente.');
+                
+                // Remover o post que falhou
+                posts.shift();
+            }
+            
+            // Esconder estado de carregamento
+            loadingIcon.style.display = 'none';
+            submitButton.disabled = false;
         }
         
         // Renderiza todos os posts
@@ -580,7 +655,7 @@
             // Limpar feed e adicionar cada post
             feed.innerHTML = '';
             
-            posts.forEach(function(post) {
+            posts.forEach(post => {
                 const postElement = document.createElement('div');
                 postElement.className = 'post';
                 
@@ -595,7 +670,7 @@
                     postContent += `
                         <div class="post-image-container">
                             <img src="${post.image}" alt="Imagem compartilhada" class="post-image" 
-                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/480x320';">
+                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/480x320?text=Imagem';">
                         </div>
                     `;
                 }
@@ -625,22 +700,20 @@
         }
         
         // Função para deletar um post
-        function deletePost(id) {
+        async function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
                 try {
-                    // Remover post do array
-                    posts = posts.filter(function(post) {
-                        return post.id !== id;
-                    });
+                    // Filtrar o post a remover
+                    posts = posts.filter(post => post.id !== id);
                     
-                    // Salvar alterações
-                    savePosts();
+                    // Atualizar o bin
+                    await updateBin();
                     
-                    // Atualizar UI
+                    // Atualizar a visualização
                     renderPosts();
                 } catch (error) {
                     console.error('Erro ao remover post:', error);
-                    showError('Não foi possível remover o conteúdo. Tente novamente.');
+                    alert('Não foi possível remover o conteúdo. Tente novamente.');
                 }
             }
         }
@@ -649,7 +722,7 @@
         function showAlert(type) {
             const alert = type === 'success' ? alertSuccess : alertError;
             alert.style.display = 'block';
-            setTimeout(function() {
+            setTimeout(() => {
                 alert.style.display = 'none';
             }, 3000);
         }
