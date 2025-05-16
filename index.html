@@ -277,6 +277,23 @@
             text-align: center;
         }
 
+        .debug-section {
+            background-color: #333;
+            color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .refresh-button {
+            background-color: #4CAF50;
+            margin-top: 10px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
         @media (max-width: 768px) {
             .input-section {
                 padding: 20px;
@@ -302,6 +319,11 @@
                 <span id="status-text" class="status-text">Conectando...</span>
             </div>
         </header>
+        
+        <div class="debug-section" id="debug-section">
+            <h3>Debug Info</h3>
+            <div id="debug-content"></div>
+        </div>
 
         <div class="input-section">
             <div class="alert alert-success" id="alert-success">Link adicionado com sucesso!</div>
@@ -317,6 +339,8 @@
                 Nenhum conteúdo compartilhado ainda. Adicione o primeiro link!
             </div>
         </div>
+        
+        <button class="refresh-button" id="refresh-button">Atualizar Conteúdo</button>
     </div>
 
     <script>
@@ -325,11 +349,15 @@
         const JSONBIN_BIN_ID = "68277dad8561e97a50154401";
         const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
         
+        // Debug mode (set to true to help troubleshoot)
+        const DEBUG = true;
+        
         // Estado da aplicação
         let posts = [];
         let username = localStorage.getItem('username') || 'Anônimo';
         let userId = localStorage.getItem('userId') || generateUserId();
         let isConnected = false;
+        let lastFetchTime = 0;
         
         // Elementos DOM
         const linkInput = document.getElementById('link-input');
@@ -344,11 +372,53 @@
         const usernameInput = document.getElementById('username-input');
         const statusIndicator = document.getElementById('status-indicator');
         const statusText = document.getElementById('status-text');
+        const debugSection = document.getElementById('debug-section');
+        const debugContent = document.getElementById('debug-content');
+        const refreshButton = document.getElementById('refresh-button');
+        
+        // Mostrar seção de debug se estiver ativado
+        if (DEBUG) {
+            debugSection.style.display = 'block';
+        }
+        
+        // Função para logar informações de debug
+        function logDebug(message, data = null) {
+            if (!DEBUG) return;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            let logMessage = `[${timestamp}] ${message}`;
+            
+            console.log(logMessage, data);
+            
+            const logElement = document.createElement('p');
+            logElement.textContent = logMessage;
+            
+            if (data) {
+                try {
+                    if (typeof data === 'object') {
+                        logElement.textContent += ` ${JSON.stringify(data).substring(0, 100)}...`;
+                    } else {
+                        logElement.textContent += ` ${data}`;
+                    }
+                } catch (e) {
+                    logElement.textContent += " [Objeto não pode ser convertido para string]";
+                }
+            }
+            
+            debugContent.appendChild(logElement);
+            
+            // Limitar número de mensagens para evitar sobrecarga de memória
+            if (debugContent.children.length > 20) {
+                debugContent.removeChild(debugContent.firstChild);
+            }
+        }
         
         // Inicialização
         init();
         
         async function init() {
+            logDebug("Iniciando aplicação");
+            
             // Carregar nome de usuário salvo
             usernameInput.value = username;
             
@@ -362,17 +432,27 @@
             globalLoading.style.display = 'none';
             
             // Iniciar verificação periódica de novos posts
-            setInterval(checkForUpdates, 10000); // Verificar a cada 10 segundos
+            setInterval(checkForUpdates, 30000); // Verificar a cada 30 segundos
         }
         
         function setupEventListeners() {
             // Botão para adicionar post
             submitButton.addEventListener('click', addPost);
             
+            // Botão para atualizar conteúdo
+            refreshButton.addEventListener('click', async () => {
+                refreshButton.textContent = "Atualizando...";
+                refreshButton.disabled = true;
+                await connect();
+                refreshButton.textContent = "Atualizar Conteúdo";
+                refreshButton.disabled = false;
+            });
+            
             // Salvar nome de usuário ao sair do campo
             usernameInput.addEventListener('blur', () => {
                 username = usernameInput.value.trim() || 'Anônimo';
                 localStorage.setItem('username', username);
+                logDebug(`Nome de usuário atualizado: ${username}`);
             });
             
             // Detectar tecla Enter no campo de link
@@ -381,6 +461,8 @@
                     addPost();
                 }
             });
+            
+            logDebug("Event listeners configurados");
         }
         
         // Gerar ID único para o usuário
@@ -392,6 +474,8 @@
         
         // Conectar ao JSONBin e carregar posts iniciais
         async function connect() {
+            logDebug("Tentando conectar ao JSONBin");
+            
             try {
                 // Buscar posts existentes
                 const response = await fetch(JSONBIN_URL, {
@@ -403,43 +487,78 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Falha ao buscar dados');
+                    throw new Error(`Erro HTTP: ${response.status}`);
                 }
                 
                 const data = await response.json();
+                logDebug("Dados recebidos do JSONBin:", data);
                 
-                // Se for a primeira vez que usamos o bin, pode não ter dados ainda
-                if (data && data.record && data.record.posts) {
+                if (data && data.posts) {
+                    // Se o bin já tem dados no formato correto
+                    posts = data.posts;
+                    logDebug(`${posts.length} posts carregados`);
+                } else if (data && data.record && data.record.posts) {
+                    // Formato alternativo que pode ser retornado
                     posts = data.record.posts;
+                    logDebug(`${posts.length} posts carregados (formato alternativo)`);
                 } else {
-                    // Inicializar com array vazio e salvar
+                    // Inicializar com array vazio se não houver dados
+                    logDebug("Nenhum post encontrado, inicializando array vazio");
                     posts = [];
                     await updateBin();
                 }
+                
+                // Ordenar por data de criação (mais recentes primeiro)
+                posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                 
                 renderPosts();
                 
                 // Atualizar status
                 isConnected = true;
                 updateConnectionStatus();
+                lastFetchTime = Date.now();
+                
+                logDebug("Conexão estabelecida com sucesso");
             } catch (error) {
+                logDebug(`Erro ao conectar: ${error.message}`);
                 console.error('Erro ao conectar:', error);
                 
-                // Tentar carregar posts do localStorage como fallback
-                const savedPosts = localStorage.getItem('localPosts');
-                if (savedPosts) {
-                    posts = JSON.parse(savedPosts);
-                    renderPosts();
+                // Se for a primeira vez que carregamos, tentar carregar do localStorage
+                if (posts.length === 0) {
+                    const savedPosts = localStorage.getItem('localPosts');
+                    if (savedPosts) {
+                        try {
+                            posts = JSON.parse(savedPosts);
+                            logDebug(`${posts.length} posts carregados do localStorage`);
+                            renderPosts();
+                        } catch (e) {
+                            logDebug(`Erro ao carregar do localStorage: ${e.message}`);
+                        }
+                    }
                 }
                 
                 isConnected = false;
                 updateConnectionStatus();
+                
+                // Mostrar o erro na UI
+                showAlert('error');
+                alert(`Erro ao carregar os dados: ${error.message}. Tente novamente mais tarde.`);
             }
         }
         
         // Verificar por atualizações periodicamente
         async function checkForUpdates() {
-            if (!isConnected) return;
+            if (!isConnected) {
+                logDebug("Verificação de atualizações pulada - não conectado");
+                return;
+            }
+            
+            // Evitar verificações se a última foi feita há menos de 10 segundos
+            if (Date.now() - lastFetchTime < 10000) {
+                return;
+            }
+            
+            logDebug("Verificando atualizações...");
             
             try {
                 const response = await fetch(JSONBIN_URL, {
@@ -451,22 +570,31 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Falha ao buscar atualizações');
+                    throw new Error(`Erro HTTP: ${response.status}`);
                 }
                 
                 const data = await response.json();
                 
-                if (data && data.record && data.record.posts) {
-                    // Verificar se há novos posts comparando com os que já temos
-                    const serverPosts = data.record.posts;
-                    
-                    // Verificar se há novos posts (por simplicidade, apenas verificamos o comprimento)
-                    if (serverPosts.length !== posts.length) {
-                        posts = serverPosts;
-                        renderPosts();
-                    }
+                let serverPosts = [];
+                
+                if (data && data.posts) {
+                    serverPosts = data.posts;
+                } else if (data && data.record && data.record.posts) {
+                    serverPosts = data.record.posts;
+                } else {
+                    throw new Error("Formato de dados inválido");
                 }
+                
+                // Verificar se há diferenças
+                if (JSON.stringify(posts) !== JSON.stringify(serverPosts)) {
+                    logDebug(`Novos dados encontrados, atualizando ${serverPosts.length} posts`);
+                    posts = serverPosts;
+                    renderPosts();
+                }
+                
+                lastFetchTime = Date.now();
             } catch (error) {
+                logDebug(`Erro ao verificar atualizações: ${error.message}`);
                 console.error('Erro ao verificar atualizações:', error);
             }
         }
@@ -474,10 +602,12 @@
         // Atualizar o bin com os posts atuais
         async function updateBin() {
             if (!isConnected) {
-                // Salvar localmente como fallback
+                logDebug("updateBin: Não conectado, salvando apenas localmente");
                 localStorage.setItem('localPosts', JSON.stringify(posts));
-                return;
+                return false;
             }
+            
+            logDebug("Atualizando JSONBin...");
             
             try {
                 const response = await fetch(JSONBIN_URL, {
@@ -490,17 +620,23 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error('Falha ao atualizar dados');
+                    throw new Error(`Erro HTTP: ${response.status}`);
                 }
+                
+                const data = await response.json();
+                logDebug("JSONBin atualizado com sucesso:", data);
                 
                 // Também salvar localmente como backup
                 localStorage.setItem('localPosts', JSON.stringify(posts));
+                return true;
                 
             } catch (error) {
+                logDebug(`Erro ao atualizar bin: ${error.message}`);
                 console.error('Erro ao atualizar bin:', error);
                 
                 // Salvar localmente como fallback
                 localStorage.setItem('localPosts', JSON.stringify(posts));
+                return false;
             }
         }
         
@@ -515,48 +651,22 @@
             }
         }
         
-        // Função para obter metadados de um link
-        async function getLinkMetadata(url) {
-            if (!isValidURL(url)) {
-                showAlert('error');
-                return null;
+        // Valida URL e corrige se necessário
+        function validateAndFixUrl(url) {
+            if (!url) return null;
+            
+            url = url.trim();
+            
+            // Adicionar protocolo se não tiver
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
             }
             
             try {
-                // Verificar se é uma URL de imagem direta
-                if (isImageUrl(url)) {
-                    return {
-                        title: 'Imagem compartilhada',
-                        description: '',
-                        url: url,
-                        image: url
-                    };
-                }
-                
-                // Para outros URLs, tentamos identificar o tipo
-                return {
-                    title: `Conteúdo compartilhado`,
-                    description: '',
-                    url: url,
-                    image: isVideoUrl(url) ? 'https://via.placeholder.com/480x360?text=Video' : null
-                };
-            } catch (error) {
-                console.error('Erro ao obter metadados do link:', error);
-                showAlert('error');
-                return null;
-            }
-        }
-        
-        // Valida URL
-        function isValidURL(string) {
-            try {
-                if (!string.startsWith('http://') && !string.startsWith('https://')) {
-                    string = 'https://' + string;
-                }
-                new URL(string);
-                return true;
+                new URL(url);
+                return url;
             } catch (_) {
-                return false;
+                return null;
             }
         }
         
@@ -576,73 +686,91 @@
         
         // Adiciona um novo post
         async function addPost() {
-            const url = linkInput.value.trim();
-            let fixedUrl = url;
+            const rawUrl = linkInput.value;
+            const comment = commentInput.value.trim();
+            
+            logDebug(`Tentando adicionar post: ${rawUrl}`);
+            
+            const url = validateAndFixUrl(rawUrl);
+            
             if (!url) {
                 alert('Por favor, insira um link válido.');
                 return;
-            }
-            
-            if (!fixedUrl.startsWith('http://') && !fixedUrl.startsWith('https://')) {
-                fixedUrl = 'https://' + fixedUrl;
             }
             
             // Mostrar estado de carregamento
             loadingIcon.style.display = 'inline-block';
             submitButton.disabled = true;
             
-            // Obter metadados do link
-            const metadata = await getLinkMetadata(fixedUrl);
-            
-            if (!metadata) {
-                loadingIcon.style.display = 'none';
-                submitButton.disabled = false;
-                return;
-            }
-            
-            // Criar novo post
-            const newPost = {
-                id: Date.now().toString(),
-                url: fixedUrl,
-                title: metadata.title || 'Link compartilhado',
-                image: metadata.image || null,
-                comment: commentInput.value.trim(),
-                author: username,
-                user_id: userId,
-                created_at: new Date().toISOString()
-            };
-            
             try {
+                // Detectar se é imagem ou vídeo
+                let image = null;
+                let title = 'Link compartilhado';
+                
+                if (isImageUrl(url)) {
+                    title = 'Imagem compartilhada';
+                    image = url;
+                } else if (isVideoUrl(url)) {
+                    title = 'Vídeo compartilhado';
+                    // Placeholder para vídeos
+                    image = 'https://via.placeholder.com/480x360?text=Video';
+                }
+                
+                // Criar novo post
+                const newPost = {
+                    id: Date.now().toString(),
+                    url: url,
+                    title: title,
+                    image: image,
+                    comment: comment,
+                    author: username,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
+                };
+                
+                logDebug("Post criado:", newPost);
+                
                 // Adicionar ao início da lista de posts
                 posts.unshift(newPost);
                 
+                // Salvar localmente imediatamente
+                localStorage.setItem('localPosts', JSON.stringify(posts));
+                
+                // Renderizar posts atualizados (para feedback imediato)
+                renderPosts();
+                
                 // Atualizar o bin
-                await updateBin();
+                const success = await updateBin();
+                
+                if (success) {
+                    logDebug("Post salvo com sucesso");
+                    showAlert('success');
+                } else {
+                    logDebug("Post salvo localmente, mas falha ao sincronizar");
+                    alert("Seu link foi salvo localmente, mas houve um problema ao sincronizar com o servidor. Seus amigos podem não ver este link até que a conexão seja restabelecida.");
+                }
                 
                 // Limpar campos
                 linkInput.value = '';
                 commentInput.value = '';
                 
-                // Renderizar posts atualizados
-                renderPosts();
-                
-                // Mostrar alerta de sucesso
-                showAlert('success');
             } catch (error) {
+                logDebug(`Erro ao adicionar post: ${error.message}`);
                 console.error('Erro ao adicionar post:', error);
-                alert('Não foi possível salvar o conteúdo. Tente novamente.');
+                alert(`Erro ao adicionar link: ${error.message}`);
                 
-                // Remover o post que falhou
-                posts.shift();
+                showAlert('error');
+            } finally {
+                // Esconder estado de carregamento
+                loadingIcon.style.display = 'none';
+                submitButton.disabled = false;
             }
-            
-            // Esconder estado de carregamento
-            loadingIcon.style.display = 'none';
-            submitButton.disabled = false;
         }
         
         // Renderiza todos os posts
         function renderPosts() {
+            logDebug(`Renderizando ${posts.length} posts`);
+            
             if (posts.length === 0) {
                 emptyMessage.style.display = 'block';
                 feed.innerHTML = '';
@@ -683,12 +811,17 @@
                 }
                 
                 // Converter data ISO para formato legível
-                const date = new Date(post.created_at).toLocaleString();
+                let dateText;
+                try {
+                    dateText = new Date(post.created_at).toLocaleString();
+                } catch (e) {
+                    dateText = "Data desconhecida";
+                }
                 
                 postContent += `
                     </div>
                     <div class="post-meta">
-                        <span>Compartilhado por ${post.author || 'Anônimo'} • ${date}</span>
+                        <span>Compartilhado por ${post.author || 'Anônimo'} • ${dateText}</span>
                         ${post.user_id === userId ? 
                           `<button class="delete-button" onclick="deletePost('${post.id}')">Remover</button>` : ''}
                     </div>
@@ -702,18 +835,35 @@
         // Função para deletar um post
         async function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
+                logDebug(`Tentando remover post: ${id}`);
+                
                 try {
                     // Filtrar o post a remover
+                    const originalLength = posts.length;
                     posts = posts.filter(post => post.id !== id);
                     
-                    // Atualizar o bin
-                    await updateBin();
-                    
-                    // Atualizar a visualização
-                    renderPosts();
+                    if (posts.length === originalLength) {
+                        logDebug("Post não encontrado para remoção");
+                    } else {
+                        logDebug("Post removido da matriz local");
+                        
+                        // Atualizar o bin
+                        const success = await updateBin();
+                        
+                        if (success) {
+                            logDebug("Post removido com sucesso");
+                        } else {
+                            logDebug("Remoção salva localmente, mas falha ao sincronizar");
+                            alert("O link foi removido localmente, mas houve um problema ao sincronizar com o servidor.");
+                        }
+                        
+                        // Atualizar a visualização
+                        renderPosts();
+                    }
                 } catch (error) {
+                    logDebug(`Erro ao remover post: ${error.message}`);
                     console.error('Erro ao remover post:', error);
-                    alert('Não foi possível remover o conteúdo. Tente novamente.');
+                    alert(`Não foi possível remover o conteúdo: ${error.message}`);
                 }
             }
         }
