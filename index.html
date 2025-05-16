@@ -277,21 +277,25 @@
             text-align: center;
         }
 
-        .debug-section {
-            background-color: #333;
-            color: #fff;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
         .refresh-button {
             background-color: #4CAF50;
             margin-top: 10px;
             display: block;
             margin-left: auto;
             margin-right: auto;
+        }
+
+        .form-note {
+            color: #a1a1a6;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .text-message {
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 15px;
         }
 
         @media (max-width: 768px) {
@@ -312,31 +316,27 @@
     <div class="container">
         <header>
             <h1>Mural Minimalista</h1>
-            <p>Compartilhe links e conteúdo com seus amigos</p>
+            <p>Compartilhe links e mensagens com seus amigos</p>
             <div style="margin-top: 12px;">
                 <input type="text" id="username-input" class="username-input" placeholder="Seu nome">
                 <span id="status-indicator" class="status-indicator"></span>
                 <span id="status-text" class="status-text">Conectando...</span>
             </div>
         </header>
-        
-        <div class="debug-section" id="debug-section">
-            <h3>Debug Info</h3>
-            <div id="debug-content"></div>
-        </div>
 
         <div class="input-section">
-            <div class="alert alert-success" id="alert-success">Link adicionado com sucesso!</div>
-            <div class="alert alert-error" id="alert-error">Não foi possível reconhecer o link. Verifique e tente novamente.</div>
+            <div class="alert alert-success" id="alert-success">Mensagem adicionada com sucesso!</div>
+            <div class="alert alert-error" id="alert-error">Ocorreu um erro. Tente novamente.</div>
             
-            <input type="text" id="link-input" placeholder="Cole o link aqui (URL de site, imagem ou vídeo)">
-            <textarea id="comment-input" placeholder="Adicione um comentário sobre o link..." rows="2"></textarea>
-            <button id="submit-button"><span id="loading-icon" class="loading" style="display: none;"></span> Adicionar ao Mural</button>
+            <p class="form-note">Cole um link ou escreva uma mensagem (ou ambos)</p>
+            <input type="text" id="link-input" placeholder="Cole um link aqui (opcional)">
+            <textarea id="comment-input" placeholder="Escreva sua mensagem aqui..." rows="3"></textarea>
+            <button id="submit-button"><span id="loading-icon" class="loading" style="display: none;"></span> Publicar no Mural</button>
         </div>
 
         <div class="feed" id="feed">
             <div class="empty-message" id="empty-message">
-                Nenhum conteúdo compartilhado ainda. Adicione o primeiro link!
+                Nenhum conteúdo compartilhado ainda. Adicione a primeira mensagem!
             </div>
         </div>
         
@@ -348,9 +348,6 @@
         const JSONBIN_API_KEY = "$2a$10$.I7.T8qNb0bObcB1JvXGgeF4OgXc62CYbk/88p3xmhR.KW4rmyl86";
         const JSONBIN_BIN_ID = "68277dad8561e97a50154401";
         const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
-        
-        // Debug mode (set to true to help troubleshoot)
-        const DEBUG = true;
         
         // Estado da aplicação
         let posts = [];
@@ -372,53 +369,12 @@
         const usernameInput = document.getElementById('username-input');
         const statusIndicator = document.getElementById('status-indicator');
         const statusText = document.getElementById('status-text');
-        const debugSection = document.getElementById('debug-section');
-        const debugContent = document.getElementById('debug-content');
         const refreshButton = document.getElementById('refresh-button');
-        
-        // Mostrar seção de debug se estiver ativado
-        if (DEBUG) {
-            debugSection.style.display = 'block';
-        }
-        
-        // Função para logar informações de debug
-        function logDebug(message, data = null) {
-            if (!DEBUG) return;
-            
-            const timestamp = new Date().toLocaleTimeString();
-            let logMessage = `[${timestamp}] ${message}`;
-            
-            console.log(logMessage, data);
-            
-            const logElement = document.createElement('p');
-            logElement.textContent = logMessage;
-            
-            if (data) {
-                try {
-                    if (typeof data === 'object') {
-                        logElement.textContent += ` ${JSON.stringify(data).substring(0, 100)}...`;
-                    } else {
-                        logElement.textContent += ` ${data}`;
-                    }
-                } catch (e) {
-                    logElement.textContent += " [Objeto não pode ser convertido para string]";
-                }
-            }
-            
-            debugContent.appendChild(logElement);
-            
-            // Limitar número de mensagens para evitar sobrecarga de memória
-            if (debugContent.children.length > 20) {
-                debugContent.removeChild(debugContent.firstChild);
-            }
-        }
         
         // Inicialização
         init();
         
         async function init() {
-            logDebug("Iniciando aplicação");
-            
             // Carregar nome de usuário salvo
             usernameInput.value = username;
             
@@ -452,17 +408,21 @@
             usernameInput.addEventListener('blur', () => {
                 username = usernameInput.value.trim() || 'Anônimo';
                 localStorage.setItem('username', username);
-                logDebug(`Nome de usuário atualizado: ${username}`);
             });
             
             // Detectar tecla Enter no campo de link
             linkInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && e.ctrlKey) {
                     addPost();
                 }
             });
-            
-            logDebug("Event listeners configurados");
+
+            // Detectar tecla Enter no campo de comentário
+            commentInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    addPost();
+                }
+            });
         }
         
         // Gerar ID único para o usuário
@@ -474,8 +434,6 @@
         
         // Conectar ao JSONBin e carregar posts iniciais
         async function connect() {
-            logDebug("Tentando conectar ao JSONBin");
-            
             try {
                 // Buscar posts existentes
                 const response = await fetch(JSONBIN_URL, {
@@ -491,19 +449,15 @@
                 }
                 
                 const data = await response.json();
-                logDebug("Dados recebidos do JSONBin:", data);
                 
                 if (data && data.posts) {
                     // Se o bin já tem dados no formato correto
                     posts = data.posts;
-                    logDebug(`${posts.length} posts carregados`);
                 } else if (data && data.record && data.record.posts) {
                     // Formato alternativo que pode ser retornado
                     posts = data.record.posts;
-                    logDebug(`${posts.length} posts carregados (formato alternativo)`);
                 } else {
                     // Inicializar com array vazio se não houver dados
-                    logDebug("Nenhum post encontrado, inicializando array vazio");
                     posts = [];
                     await updateBin();
                 }
@@ -517,10 +471,7 @@
                 isConnected = true;
                 updateConnectionStatus();
                 lastFetchTime = Date.now();
-                
-                logDebug("Conexão estabelecida com sucesso");
             } catch (error) {
-                logDebug(`Erro ao conectar: ${error.message}`);
                 console.error('Erro ao conectar:', error);
                 
                 // Se for a primeira vez que carregamos, tentar carregar do localStorage
@@ -529,10 +480,9 @@
                     if (savedPosts) {
                         try {
                             posts = JSON.parse(savedPosts);
-                            logDebug(`${posts.length} posts carregados do localStorage`);
                             renderPosts();
                         } catch (e) {
-                            logDebug(`Erro ao carregar do localStorage: ${e.message}`);
+                            console.error('Erro ao carregar do localStorage:', e);
                         }
                     }
                 }
@@ -549,7 +499,6 @@
         // Verificar por atualizações periodicamente
         async function checkForUpdates() {
             if (!isConnected) {
-                logDebug("Verificação de atualizações pulada - não conectado");
                 return;
             }
             
@@ -557,8 +506,6 @@
             if (Date.now() - lastFetchTime < 10000) {
                 return;
             }
-            
-            logDebug("Verificando atualizações...");
             
             try {
                 const response = await fetch(JSONBIN_URL, {
@@ -587,14 +534,12 @@
                 
                 // Verificar se há diferenças
                 if (JSON.stringify(posts) !== JSON.stringify(serverPosts)) {
-                    logDebug(`Novos dados encontrados, atualizando ${serverPosts.length} posts`);
                     posts = serverPosts;
                     renderPosts();
                 }
                 
                 lastFetchTime = Date.now();
             } catch (error) {
-                logDebug(`Erro ao verificar atualizações: ${error.message}`);
                 console.error('Erro ao verificar atualizações:', error);
             }
         }
@@ -602,12 +547,9 @@
         // Atualizar o bin com os posts atuais
         async function updateBin() {
             if (!isConnected) {
-                logDebug("updateBin: Não conectado, salvando apenas localmente");
                 localStorage.setItem('localPosts', JSON.stringify(posts));
                 return false;
             }
-            
-            logDebug("Atualizando JSONBin...");
             
             try {
                 const response = await fetch(JSONBIN_URL, {
@@ -623,15 +565,11 @@
                     throw new Error(`Erro HTTP: ${response.status}`);
                 }
                 
-                const data = await response.json();
-                logDebug("JSONBin atualizado com sucesso:", data);
-                
                 // Também salvar localmente como backup
                 localStorage.setItem('localPosts', JSON.stringify(posts));
                 return true;
                 
             } catch (error) {
-                logDebug(`Erro ao atualizar bin: ${error.message}`);
                 console.error('Erro ao atualizar bin:', error);
                 
                 // Salvar localmente como fallback
@@ -653,7 +591,7 @@
         
         // Valida URL e corrige se necessário
         function validateAndFixUrl(url) {
-            if (!url) return null;
+            if (!url || url.trim() === '') return null;
             
             url = url.trim();
             
@@ -672,11 +610,13 @@
         
         // Verifica se é URL de imagem
         function isImageUrl(url) {
+            if (!url) return false;
             return /\.(jpeg|jpg|gif|png|webp)$/i.test(url);
         }
         
         // Verifica se é URL de vídeo
         function isVideoUrl(url) {
+            if (!url) return false;
             return url.includes('youtube.com') || 
                    url.includes('youtu.be') || 
                    url.includes('vimeo.com') ||
@@ -689,12 +629,9 @@
             const rawUrl = linkInput.value;
             const comment = commentInput.value.trim();
             
-            logDebug(`Tentando adicionar post: ${rawUrl}`);
-            
-            const url = validateAndFixUrl(rawUrl);
-            
-            if (!url) {
-                alert('Por favor, insira um link válido.');
+            // Permitir posts apenas com comentário (sem URL)
+            if (!comment && !rawUrl.trim()) {
+                alert('Por favor, adicione um texto ou um link.');
                 return;
             }
             
@@ -703,17 +640,23 @@
             submitButton.disabled = true;
             
             try {
-                // Detectar se é imagem ou vídeo
-                let image = null;
-                let title = 'Link compartilhado';
+                let url = validateAndFixUrl(rawUrl);
                 
-                if (isImageUrl(url)) {
-                    title = 'Imagem compartilhada';
-                    image = url;
-                } else if (isVideoUrl(url)) {
-                    title = 'Vídeo compartilhado';
-                    // Placeholder para vídeos
-                    image = 'https://via.placeholder.com/480x360?text=Video';
+                // Detectar se é imagem ou vídeo (apenas se houver URL)
+                let image = null;
+                let title = 'Mensagem';
+                
+                if (url) {
+                    if (isImageUrl(url)) {
+                        title = 'Imagem compartilhada';
+                        image = url;
+                    } else if (isVideoUrl(url)) {
+                        title = 'Vídeo compartilhado';
+                        // Placeholder para vídeos
+                        image = 'https://via.placeholder.com/480x360?text=Video';
+                    } else {
+                        title = 'Link compartilhado';
+                    }
                 }
                 
                 // Criar novo post
@@ -725,10 +668,9 @@
                     comment: comment,
                     author: username,
                     user_id: userId,
-                    created_at: new Date().toISOString()
+                    created_at: new Date().toISOString(),
+                    type: url ? 'link' : 'text'
                 };
-                
-                logDebug("Post criado:", newPost);
                 
                 // Adicionar ao início da lista de posts
                 posts.unshift(newPost);
@@ -743,11 +685,9 @@
                 const success = await updateBin();
                 
                 if (success) {
-                    logDebug("Post salvo com sucesso");
                     showAlert('success');
                 } else {
-                    logDebug("Post salvo localmente, mas falha ao sincronizar");
-                    alert("Seu link foi salvo localmente, mas houve um problema ao sincronizar com o servidor. Seus amigos podem não ver este link até que a conexão seja restabelecida.");
+                    alert("Sua mensagem foi salva localmente, mas houve um problema ao sincronizar com o servidor. Seus amigos podem não ver este conteúdo até que a conexão seja restabelecida.");
                 }
                 
                 // Limpar campos
@@ -755,9 +695,8 @@
                 commentInput.value = '';
                 
             } catch (error) {
-                logDebug(`Erro ao adicionar post: ${error.message}`);
                 console.error('Erro ao adicionar post:', error);
-                alert(`Erro ao adicionar link: ${error.message}`);
+                alert(`Erro ao adicionar mensagem: ${error.message}`);
                 
                 showAlert('error');
             } finally {
@@ -769,8 +708,6 @@
         
         // Renderiza todos os posts
         function renderPosts() {
-            logDebug(`Renderizando ${posts.length} posts`);
-            
             if (posts.length === 0) {
                 emptyMessage.style.display = 'block';
                 feed.innerHTML = '';
@@ -787,27 +724,38 @@
                 const postElement = document.createElement('div');
                 postElement.className = 'post';
                 
-                let postContent = `
-                    <div class="post-content">
-                        <h3 class="post-title">${post.title || 'Link compartilhado'}</h3>
-                        <a href="${post.url}" target="_blank" class="post-link">${post.url}</a>
-                `;
+                let postContent = `<div class="post-content">`;
                 
-                // Adicionar imagem se disponível
-                if (post.image) {
-                    postContent += `
-                        <div class="post-image-container">
-                            <img src="${post.image}" alt="Imagem compartilhada" class="post-image" 
-                                 onerror="this.onerror=null; this.src='https://via.placeholder.com/480x320?text=Imagem';">
-                        </div>
-                    `;
-                }
-                
-                // Adicionar comentário se disponível
-                if (post.comment) {
-                    postContent += `
-                        <div class="post-comment">${post.comment}</div>
-                    `;
+                // Se for apenas uma mensagem de texto (sem link)
+                if (!post.url && post.comment) {
+                    postContent += `<div class="text-message">${post.comment}</div>`;
+                } else {
+                    // Se tiver título e for um link, mostrar título
+                    if (post.title) {
+                        postContent += `<h3 class="post-title">${post.title}</h3>`;
+                    }
+                    
+                    // Se tiver URL, mostrar o link
+                    if (post.url) {
+                        postContent += `<a href="${post.url}" target="_blank" class="post-link">${post.url}</a>`;
+                    }
+                    
+                    // Adicionar imagem se disponível
+                    if (post.image) {
+                        postContent += `
+                            <div class="post-image-container">
+                                <img src="${post.image}" alt="Imagem compartilhada" class="post-image" 
+                                     onerror="this.onerror=null; this.src='https://via.placeholder.com/480x320?text=Imagem';">
+                            </div>
+                        `;
+                    }
+                    
+                    // Adicionar comentário se disponível e não for um post só de texto
+                    if (post.comment && post.url) {
+                        postContent += `
+                            <div class="post-comment">${post.comment}</div>
+                        `;
+                    }
                 }
                 
                 // Converter data ISO para formato legível
@@ -835,33 +783,25 @@
         // Função para deletar um post
         async function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
-                logDebug(`Tentando remover post: ${id}`);
-                
                 try {
                     // Filtrar o post a remover
                     const originalLength = posts.length;
                     posts = posts.filter(post => post.id !== id);
                     
                     if (posts.length === originalLength) {
-                        logDebug("Post não encontrado para remoção");
+                        console.warn("Post não encontrado para remoção");
                     } else {
-                        logDebug("Post removido da matriz local");
-                        
                         // Atualizar o bin
                         const success = await updateBin();
                         
-                        if (success) {
-                            logDebug("Post removido com sucesso");
-                        } else {
-                            logDebug("Remoção salva localmente, mas falha ao sincronizar");
-                            alert("O link foi removido localmente, mas houve um problema ao sincronizar com o servidor.");
+                        if (!success) {
+                            alert("O conteúdo foi removido localmente, mas houve um problema ao sincronizar com o servidor.");
                         }
                         
                         // Atualizar a visualização
                         renderPosts();
                     }
                 } catch (error) {
-                    logDebug(`Erro ao remover post: ${error.message}`);
                     console.error('Erro ao remover post:', error);
                     alert(`Não foi possível remover o conteúdo: ${error.message}`);
                 }
