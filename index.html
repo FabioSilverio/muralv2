@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mural Minimalista</title>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -242,132 +240,28 @@
             display: none;
         }
 
-        .info-banner {
-            background-color: rgba(48, 107, 209, 0.2);
-            color: #30d158;
-            text-align: center;
-            padding: 12px;
-            margin: 0 0 20px 0;
-            border-radius: 8px;
-            font-size: 14px;
-        }
-
-        .storage-url-container {
-            margin-top: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background-color: var(--secondary-bg);
-            padding: 10px;
-            border-radius: 8px;
-        }
-
-        .storage-url-input {
-            flex-grow: 1;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            padding: 8px;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .copy-btn {
-            padding: 6px 10px;
-            font-size: 14px;
-            border-radius: 4px;
-        }
-
-        .global-loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .loader {
-            width: 48px;
-            height: 48px;
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: var(--accent-color);
-            animation: spin 1s linear infinite;
-        }
-
-        .loader-text {
-            color: white;
-            margin-top: 16px;
-            font-size: 16px;
-            text-align: center;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1001;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.7);
-        }
-
-        .modal-content {
+        .sync-section {
             background-color: var(--card-bg);
-            margin: 15% auto;
+            border-radius: 12px;
             padding: 20px;
-            border-radius: 10px;
-            width: 80%;
-            max-width: 500px;
+            margin-bottom: 20px;
         }
 
-        .modal-content h3 {
-            margin-bottom: 15px;
+        .export-btn, .import-btn {
+            margin-right: 10px;
         }
 
-        .modal-buttons {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
+        .export-link {
+            display: none;
+            margin-top: 10px;
         }
 
-        @media (max-width: 768px) {
-            .input-section {
-                padding: 20px;
-            }
+        #import-input {
+            display: none;
         }
     </style>
 </head>
 <body>
-    <div id="global-loading" class="global-loading">
-        <div style="text-align: center;">
-            <div class="loader"></div>
-            <div class="loader-text">Conectando ao servidor...</div>
-        </div>
-    </div>
-
-    <div id="setup-modal" class="modal">
-        <div class="modal-content">
-            <h3>Configuração do Mural</h3>
-            <p>Escolha uma opção para compartilhar este mural:</p>
-            <div style="margin-top: 15px;">
-                <button id="create-new-storage">Criar Novo Mural</button>
-                <div style="margin-top: 20px;">
-                    <p>Ou entre em um mural existente:</p>
-                    <input type="text" id="storage-id-input" placeholder="Digite o código do mural compartilhado">
-                    <button id="join-storage" style="margin-top: 10px;">Entrar no Mural</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="container">
         <header>
             <h1>Mural Minimalista</h1>
@@ -377,12 +271,17 @@
             </div>
         </header>
 
-        <div id="info-banner" class="info-banner">
-            Para que todos vejam os mesmos conteúdos, compartilhe este código do mural:
-            <div class="storage-url-container">
-                <input type="text" id="storage-url" class="storage-url-input" readonly>
-                <button id="copy-btn" class="copy-btn">Copiar</button>
-            </div>
+        <div class="sync-section">
+            <h3>Compartilhar o Mural</h3>
+            <p style="margin-bottom: 15px;">Para compartilhar este mural com seus amigos:</p>
+            <button id="export-btn" class="export-btn">Exportar Mural</button>
+            <a id="export-link" class="export-link" download="mural-data.json">Clique aqui para baixar o arquivo do mural</a>
+            
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid var(--border-color);">
+            
+            <p style="margin-bottom: 15px;">Para ver um mural compartilhado por um amigo:</p>
+            <button id="import-btn" class="import-btn">Importar Mural</button>
+            <input type="file" id="import-input" accept=".json">
         </div>
 
         <div class="input-section">
@@ -392,7 +291,7 @@
             
             <input type="text" id="link-input" placeholder="Cole o link aqui (URL de site, imagem ou vídeo)">
             <textarea id="comment-input" placeholder="Adicione um comentário sobre o link..." rows="2"></textarea>
-            <button id="submit-button"><span id="loading-icon" class="loading" style="display: none;"></span> Adicionar ao Mural</button>
+            <button id="submit-button">Adicionar ao Mural</button>
         </div>
 
         <div class="feed" id="feed">
@@ -403,27 +302,10 @@
     </div>
 
     <script>
-        // Configuração do Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBnmrMAfoQvVRgXCIPG8B3iBgD1DNox5hg",
-            authDomain: "mural-minimalista.firebaseapp.com",
-            databaseURL: "https://mural-minimalista-default-rtdb.firebaseio.com",
-            projectId: "mural-minimalista",
-            storageBucket: "mural-minimalista.appspot.com",
-            messagingSenderId: "951410585595",
-            appId: "1:951410585595:web:7df542b49345d9a7333b81"
-        };
-        
-        // Inicializar Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        
         // Variáveis globais
         let posts = [];
         let username = localStorage.getItem('username') || 'Anônimo';
         let userId = localStorage.getItem('userId') || generateUserId();
-        let muralId = localStorage.getItem('muralId');
-        let postsRef = null;
         
         // Elementos DOM
         const linkInput = document.getElementById('link-input');
@@ -431,137 +313,56 @@
         const submitButton = document.getElementById('submit-button');
         const feed = document.getElementById('feed');
         const emptyMessage = document.getElementById('empty-message');
-        const loadingIcon = document.getElementById('loading-icon');
         const alertSuccess = document.getElementById('alert-success');
         const alertError = document.getElementById('alert-error');
-        const globalLoading = document.getElementById('global-loading');
         const usernameInput = document.getElementById('username-input');
         const errorMessage = document.getElementById('error-message');
-        const storageUrlInput = document.getElementById('storage-url');
-        const copyBtn = document.getElementById('copy-btn');
-        const setupModal = document.getElementById('setup-modal');
-        const createNewStorageBtn = document.getElementById('create-new-storage');
-        const joinStorageBtn = document.getElementById('join-storage');
-        const storageIdInput = document.getElementById('storage-id-input');
-        const infoBanner = document.getElementById('info-banner');
+        const exportBtn = document.getElementById('export-btn');
+        const exportLink = document.getElementById('export-link');
+        const importBtn = document.getElementById('import-btn');
+        const importInput = document.getElementById('import-input');
         
         // Inicialização
         init();
         
         function init() {
-            // Carregar nome de usuário salvo
+            // Carregar nome de usuário
             usernameInput.value = username;
             
-            // Verificar se já temos um ID de mural
-            if (muralId) {
-                // Usar o ID existente
-                storageUrlInput.value = muralId;
-                setupFirebaseListeners();
-                setupEventListeners();
-                globalLoading.style.display = 'none';
-            } else {
-                // Mostrar modal de configuração
-                globalLoading.style.display = 'none';
-                setupModal.style.display = 'block';
-                
-                // Configurar os botões do modal
-                createNewStorageBtn.addEventListener('click', createNewMural);
-                joinStorageBtn.addEventListener('click', joinExistingMural);
-            }
-        }
-        
-        // Criar um novo mural
-        function createNewMural() {
-            const newId = generateMuralId();
-            setMuralId(newId);
-            setupModal.style.display = 'none';
-            setupFirebaseListeners();
+            // Carregar posts salvos
+            loadPosts();
+            
+            // Configurar event listeners
             setupEventListeners();
         }
         
-        // Entrar em um mural existente
-        function joinExistingMural() {
-            const inputId = storageIdInput.value.trim().toUpperCase();
-            if (inputId) {
-                setMuralId(inputId);
-                setupModal.style.display = 'none';
-                setupFirebaseListeners();
-                setupEventListeners();
-            } else {
-                alert('Por favor, digite um código de mural válido.');
-            }
-        }
-        
-        // Configurar ouvintes do Firebase
-        function setupFirebaseListeners() {
-            postsRef = database.ref('murals/' + muralId + '/posts');
-            
-            // Ouvir alterações
-            postsRef.on('value', (snapshot) => {
-                posts = [];
-                snapshot.forEach((childSnapshot) => {
-                    posts.push({
-                        id: childSnapshot.key,
-                        ...childSnapshot.val()
-                    });
-                });
-                
-                // Ordenar do mais recente para o mais antigo
-                posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-                
-                renderPosts();
-                globalLoading.style.display = 'none';
-            });
-            
-            // Lidar com erros
-            postsRef.on('error', (error) => {
-                console.error('Erro ao ler dados:', error);
-                showError('Erro ao conectar com o servidor. Tente novamente.');
-                globalLoading.style.display = 'none';
-            });
-        }
-        
-        // Definir e salvar o ID do mural
-        function setMuralId(id) {
-            muralId = id;
-            localStorage.setItem('muralId', id);
-            storageUrlInput.value = id;
-        }
-        
-        // Gerar ID aleatório para o mural
-        function generateMuralId() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let id = '';
-            for (let i = 0; i < 6; i++) {
-                id += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return id;
-        }
-        
-        // Configurar listeners de eventos
+        // Configurar event listeners
         function setupEventListeners() {
             // Botão para adicionar post
             submitButton.addEventListener('click', addPost);
             
-            // Salvar nome de usuário ao sair do campo
+            // Salvar nome de usuário
             usernameInput.addEventListener('blur', function() {
                 username = this.value.trim() || 'Anônimo';
                 localStorage.setItem('username', username);
             });
             
-            // Detectar tecla Enter no campo de link
+            // Tecla Enter no campo de link
             linkInput.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     addPost();
                 }
             });
             
-            // Botão de copiar código do mural
-            copyBtn.addEventListener('click', function() {
-                storageUrlInput.select();
-                document.execCommand('copy');
-                alert('Código copiado! Compartilhe com seus amigos para que eles vejam o mesmo mural.');
+            // Exportar mural
+            exportBtn.addEventListener('click', exportMural);
+            
+            // Importar mural
+            importBtn.addEventListener('click', function() {
+                importInput.click();
             });
+            
+            importInput.addEventListener('change', importMural);
         }
         
         // Gerar ID único para o usuário
@@ -569,6 +370,123 @@
             const id = Date.now().toString(36) + Math.random().toString(36).substring(2);
             localStorage.setItem('userId', id);
             return id;
+        }
+        
+        // Carregar posts salvos
+        function loadPosts() {
+            const savedPosts = localStorage.getItem('mural_posts');
+            if (savedPosts) {
+                try {
+                    posts = JSON.parse(savedPosts);
+                    renderPosts();
+                } catch (error) {
+                    console.error('Erro ao carregar posts:', error);
+                    posts = [];
+                    savePosts();
+                }
+            }
+        }
+        
+        // Salvar posts
+        function savePosts() {
+            try {
+                localStorage.setItem('mural_posts', JSON.stringify(posts));
+            } catch (error) {
+                console.error('Erro ao salvar posts:', error);
+                showError('Erro ao salvar conteúdo. Talvez o armazenamento esteja cheio.');
+            }
+        }
+        
+        // Exportar mural
+        function exportMural() {
+            try {
+                // Criar objeto de dados
+                const exportData = {
+                    posts: posts,
+                    exportDate: new Date().toISOString()
+                };
+                
+                // Converter para JSON
+                const jsonData = JSON.stringify(exportData);
+                
+                // Criar blob
+                const blob = new Blob([jsonData], {type: 'application/json'});
+                
+                // Criar URL para download
+                const url = URL.createObjectURL(blob);
+                
+                // Configurar link de download
+                exportLink.href = url;
+                exportLink.style.display = 'block';
+                
+                // Liberar URL após um tempo
+                setTimeout(() => {
+                    URL.revokeObjectURL(url);
+                }, 60000);
+                
+                showAlert('success');
+            } catch (error) {
+                console.error('Erro ao exportar mural:', error);
+                showError('Não foi possível exportar o mural. Tente novamente.');
+            }
+        }
+        
+        // Importar mural
+        function importMural(event) {
+            try {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    try {
+                        const importData = JSON.parse(e.target.result);
+                        
+                        if (importData && Array.isArray(importData.posts)) {
+                            // Perguntar se deseja substituir ou mesclar
+                            const action = confirm('Deseja substituir todos os conteúdos atuais pelos importados?\n\nOK = Substituir tudo\nCancelar = Adicionar aos existentes');
+                            
+                            if (action) {
+                                // Substituir
+                                posts = importData.posts;
+                            } else {
+                                // Mesclar (adicionar novos)
+                                const existingIds = posts.map(p => p.id);
+                                importData.posts.forEach(post => {
+                                    if (!existingIds.includes(post.id)) {
+                                        posts.push(post);
+                                    }
+                                });
+                                
+                                // Ordenar por data
+                                posts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                            }
+                            
+                            savePosts();
+                            renderPosts();
+                            showAlert('success');
+                        } else {
+                            showError('Arquivo inválido. Não é um mural exportado corretamente.');
+                        }
+                    } catch (parseError) {
+                        console.error('Erro ao processar arquivo importado:', parseError);
+                        showError('Arquivo inválido ou corrompido. Tente outro arquivo.');
+                    }
+                };
+                
+                reader.onerror = function() {
+                    showError('Erro ao ler o arquivo. Tente novamente.');
+                };
+                
+                reader.readAsText(file);
+                
+                // Limpar input para permitir importar o mesmo arquivo novamente
+                event.target.value = '';
+            } catch (error) {
+                console.error('Erro ao importar mural:', error);
+                showError('Não foi possível importar o mural. Tente novamente.');
+            }
         }
         
         // Mostrar mensagem de erro
@@ -597,17 +515,13 @@
                 return;
             }
             
-            // Mostrar estado de carregamento
-            loadingIcon.style.display = 'inline-block';
-            submitButton.disabled = true;
-            
             try {
                 // Verificar se é uma URL de imagem
                 const isImage = isImageUrl(url);
-                const isVideo = isVideoUrl(url);
                 
                 // Criar objeto do post
                 const newPost = {
+                    id: Date.now().toString(),
                     url: url,
                     title: isImage ? 'Imagem compartilhada' : 'Link compartilhado',
                     image: isImage ? url : null,
@@ -617,34 +531,23 @@
                     created_at: new Date().toISOString()
                 };
                 
-                // Adicionar ao Firebase
-                const newPostRef = postsRef.push();
-                newPostRef.set(newPost)
-                    .then(() => {
-                        // Limpar campos
-                        linkInput.value = '';
-                        commentInput.value = '';
-                        
-                        // Mostrar alerta de sucesso
-                        showAlert('success');
-                    })
-                    .catch((error) => {
-                        console.error('Erro ao adicionar post:', error);
-                        showError('Falha ao salvar o conteúdo. Tente novamente.');
-                    })
-                    .finally(() => {
-                        // Esconder estado de carregamento
-                        loadingIcon.style.display = 'none';
-                        submitButton.disabled = false;
-                    });
+                // Adicionar ao array e salvar
+                posts.unshift(newPost);
+                savePosts();
+                
+                // Atualizar UI
+                renderPosts();
+                
+                // Limpar campos
+                linkInput.value = '';
+                commentInput.value = '';
+                
+                // Mostrar alerta de sucesso
+                showAlert('success');
                 
             } catch (error) {
                 console.error('Erro ao adicionar post:', error);
                 showError('Falha ao salvar o conteúdo. Tente novamente.');
-                
-                // Esconder estado de carregamento
-                loadingIcon.style.display = 'none';
-                submitButton.disabled = false;
             }
         }
         
@@ -661,15 +564,6 @@
         // Verifica se é URL de imagem
         function isImageUrl(url) {
             return /\.(jpeg|jpg|gif|png|webp)$/i.test(url);
-        }
-        
-        // Verifica se é URL de vídeo
-        function isVideoUrl(url) {
-            return url.includes('youtube.com') || 
-                   url.includes('youtu.be') || 
-                   url.includes('vimeo.com') ||
-                   url.includes('dailymotion.com') ||
-                   /\.(mp4|webm|ogg)$/i.test(url);
         }
         
         // Renderiza todos os posts
@@ -733,14 +627,21 @@
         // Função para deletar um post
         function deletePost(id) {
             if (confirm('Tem certeza que deseja remover este conteúdo?')) {
-                postsRef.child(id).remove()
-                    .then(() => {
-                        showAlert('success');
-                    })
-                    .catch((error) => {
-                        console.error('Erro ao remover post:', error);
-                        showError('Não foi possível remover o conteúdo. Tente novamente.');
+                try {
+                    // Remover post do array
+                    posts = posts.filter(function(post) {
+                        return post.id !== id;
                     });
+                    
+                    // Salvar alterações
+                    savePosts();
+                    
+                    // Atualizar UI
+                    renderPosts();
+                } catch (error) {
+                    console.error('Erro ao remover post:', error);
+                    showError('Não foi possível remover o conteúdo. Tente novamente.');
+                }
             }
         }
         
